@@ -12,7 +12,7 @@
 */
 
 
-#include "Renderer.hpp"
+#include "Renderer/Renderer/Renderer.hpp"
 
 #include <SDL3/SDL.h>
 #include <bx/math.h>
@@ -33,8 +33,7 @@ namespace
     constexpr uint32_t ClearColor = 0x1E1E1EFFu;
     constexpr uint32_t ResetFlags = BGFX_RESET_VSYNC;
 
-    // A triangle is 2D, so depth writes are all the depth handling it needs;
-    // back-face culling would only make winding order a source of bugs.
+    // No culling: winding order must never decide whether a 2D sprite is visible.
     constexpr uint64_t DrawState = BGFX_STATE_WRITE_RGB
                                  | BGFX_STATE_WRITE_A
                                  | BGFX_STATE_WRITE_Z
@@ -59,14 +58,12 @@ namespace
     constexpr uint32_t Green = 0xFF00FF00u;
     constexpr uint32_t Blue = 0xFFFF0000u;
 
-    // One compiled shader binary, embedded in the executable.
     struct ShaderBlob
     {
         const uint8_t* data;
         uint32_t size;
     };
 
-    // The same shader compiled for every backend we support.
     struct ShaderVariants
     {
         ShaderBlob glsl;
@@ -79,8 +76,7 @@ namespace
         return ShaderBlob{ data, static_cast<uint32_t>(Size) };
     }
 
-    // bgfx's BGFX_EMBEDDED_SHADER macro is not used on purpose: on Linux it also
-    // references the dxbc/essl symbols, which we do not compile.
+    // Not BGFX_EMBEDDED_SHADER: on Linux it also references dxbc/essl symbols we never compile.
     bgfx::ShaderHandle createEmbeddedShader(const ShaderVariants& variants, const char* name)
     {
         ShaderBlob blob{ nullptr, 0 };
@@ -110,7 +106,6 @@ namespace
         return handle;
     }
 
-    // Hands bgfx the native window it must present to.
     bool fillNativeWindow(SDL_Window* window, bgfx::Init& init)
     {
         const SDL_PropertiesID props = SDL_GetWindowProperties(window);
@@ -189,8 +184,7 @@ bool Renderer::initialize(SDL_Window* window)
 
     PosColorVertex::init(m_layout);
 
-    // Calling renderFrame() before init() from this same thread keeps bgfx
-    // single-threaded, so every bgfx call may come from the SDL thread.
+    // renderFrame() before init() on this thread keeps bgfx single-threaded.
     bgfx::renderFrame();
 
     bgfx::Init init;
@@ -302,8 +296,7 @@ void Renderer::createTriangleMesh()
         { -0.5f, -0.5f, 0.0f, Blue  },
     };
 
-    // copy(), not makeRef(): bgfx reads vertex data on a later frame, so it must
-    // own it rather than point at memory the caller may free.
+    // copy(), not makeRef(): bgfx reads this on a later frame, after `vertices` is gone.
     m_vbh = bgfx::createVertexBuffer(bgfx::copy(vertices, sizeof(vertices)), m_layout);
 }
 

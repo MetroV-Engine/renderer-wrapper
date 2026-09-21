@@ -8,9 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # --- bgfx / bx / bimg via bgfx.cmake ---
 include(FetchContent)
 
-# bgfx.cmake builds its examples and every tool by default, and CLion turns each
-# resulting target into a run configuration. Keep only what we consume, so
-# renderer_wrapper is the one runnable target in the project.
+# CLion lists every target as a run configuration, so build only what we consume.
 set(BGFX_BUILD_EXAMPLES OFF)      # dozens of example-* executables
 set(BGFX_BUILD_TESTS OFF)
 set(BGFX_INSTALL OFF)             # no install target to list
@@ -29,9 +27,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(bgfx)
 # ^ creates the bgfx, bx, bimg targets and the bgfx::shaderc tool.
 
-# bgfx.cmake force-enables example-common whenever its tools are built, so the
-# option above cannot switch it off. Nothing here links it (it is dear-imgui,
-# nanovg and friends), so keep it out of the default build.
+# bgfx.cmake force-enables example-common alongside its tools; nothing here links it.
 if (TARGET example-common)
     set_target_properties(example-common PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
@@ -39,17 +35,14 @@ endif()
 find_package(SDL3 CONFIG REQUIRED)
 
 # --- Shader compilation ------------------------------------------------------
-# shaderc turns shaders/*.sc into C headers at build time, so the executable is
-# self-contained: no shader binaries to ship, no working-directory assumptions.
-#
-# bgfx.cmake only defines BGFX_SHADER_INCLUDE_PATH in its *installed* config
-# file, so with FetchContent we point it at the sources ourselves.
+# shaderc emits C headers at build time: nothing to ship, no working-directory guessing.
+
+# BGFX_SHADER_INCLUDE_PATH only exists in bgfx.cmake's installed config, not under FetchContent.
 set(BGFX_SHADER_INCLUDE_PATH ${bgfx_SOURCE_DIR}/bgfx/src)
 include(${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake)
 
 set(SHADER_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/shaders)
-# 430 -> GLSL (OpenGL backend), spirv -> SPIR-V (Vulkan backend).
-# Both are embedded; Renderer picks the one matching the backend bgfx selected.
+# Both are embedded; Renderer picks the one matching the backend bgfx selected at runtime.
 set(SHADER_PROFILES 430 spirv)
 
 bgfx_compile_shaders(
@@ -75,10 +68,21 @@ bgfx_compile_shaders(
 # --- Executable --------------------------------------------------------------
 add_executable(renderer_wrapper
         main.cpp
-        Renderer/Renderer.cpp
-        Renderer/Renderer.hpp
-        # Listing the generated headers as sources makes the build run shaderc
-        # before compiling, and re-run it whenever a .sc file changes.
+        Renderer/RendererTypes.hpp
+        Renderer/IRenderer.hpp
+        Renderer/Transform/Transform.cpp
+        Renderer/Transform/Transform.hpp
+        Renderer/RendererFactory/RendererFactory.cpp
+        Renderer/RendererFactory/RendererFactory.hpp
+        Renderer/SdlWindowBridge/SdlWindowBridge.cpp
+        Renderer/SdlWindowBridge/SdlWindowBridge.hpp
+        Renderer/SdlRenderer/SdlRenderer.cpp
+        Renderer/SdlRenderer/SdlRenderer.hpp
+        Renderer/NullRenderer/NullRenderer.cpp
+        Renderer/NullRenderer/NullRenderer.hpp
+        Renderer/Renderer/Renderer.cpp
+        Renderer/Renderer/Renderer.hpp
+        # As sources, these run shaderc before compiling and again on every .sc edit.
         ${VERTEX_SHADER_HEADERS}
         ${FRAGMENT_SHADER_HEADERS}
 )

@@ -1,0 +1,74 @@
+/*
+    Created on: 9/22/26
+    Filename: NullRenderer.hpp
+    Description: Headless backend: records draw calls so systems can be tested without a window.
+
+    ███╗   ███╗███████╗████████╗██████╗  ██████╗ ██╗   ██╗
+    ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██║   ██║
+    ██╔████╔██║█████╗     ██║   ██████╔╝██║   ██║██║   ██║
+    ██║╚██╔╝██║██╔══╝     ██║   ██╔══██╗██║   ██║╚██╗ ██╔╝
+    ██║ ╚═╝ ██║███████╗   ██║   ██║  ██║╚██████╔╝ ╚████╔╝
+    ╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝   ╚═══╝
+*/
+
+#ifndef RENDERER_WRAPPER_NULLRENDERER_HPP
+#define RENDERER_WRAPPER_NULLRENDERER_HPP
+
+#include "Renderer/IRenderer.hpp"
+
+#include <unordered_map>
+#include <vector>
+
+namespace gfx {
+
+    class NullRenderer final : public IRenderer {
+        public:
+            struct Recorded {
+                enum class Kind : uint8_t { Rect, Sprite };
+
+                Kind kind = Kind::Rect;
+                RectDraw rect;
+                SpriteDraw sprite;
+            };
+
+            NullRenderer(uint32_t width, uint32_t height);
+
+            void resize(uint32_t width, uint32_t height) override;
+
+            void beginFrame(Color clear) override;
+            void endFrame() override;
+
+            void setCamera(const Camera2D& camera) override;
+
+            TextureHandle createTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
+            void destroyTexture(TextureHandle texture) override;
+            Vec2 textureSize(TextureHandle texture) const override;
+
+            void drawRect(const RectDraw& draw) override;
+            void drawSprite(const SpriteDraw& draw) override;
+
+            const char* backendName() const override;
+
+            // Test surface.
+            const std::vector<Recorded>& recorded() const { return m_recorded; }
+            const Camera2D& camera() const { return m_camera; }
+            Color lastClear() const { return m_lastClear; }
+            uint32_t framesPresented() const { return m_framesPresented; }
+            void clearRecorded() { m_recorded.clear(); }
+
+        private:
+            uint32_t m_width = 0;
+            uint32_t m_height = 0;
+            Camera2D m_camera;
+            Color m_lastClear;
+            bool m_inFrame = false;
+            uint32_t m_framesPresented = 0;
+
+            std::vector<Recorded> m_recorded;
+            std::unordered_map<uint32_t, Vec2> m_textures;
+            uint32_t m_nextTexture = 1;
+    };
+
+}
+
+#endif //RENDERER_WRAPPER_NULLRENDERER_HPP

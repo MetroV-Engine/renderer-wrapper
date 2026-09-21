@@ -47,13 +47,25 @@ then write their contents, and edit `CMakeLists.txt` and shaders.
 - RAII for every GPU/native resource; no leaking handles, no manual cleanup left to the caller.
 - Keep the existing file-header comment banner on new files (CLion template).
 
+### Comments
+- Comment only what the code cannot say: a non-obvious constraint, a trap, or *why* this way.
+- Never restate what the line already says, and never narrate obvious code.
+- **One line per comment.** If it needs a paragraph, the code needs a better name or a split.
+
 ## Layout
 
+**One unit, one directory** — anything with a `.cpp` lives in its own folder named after it,
+holding its `.hpp` and `.cpp`. Header-only units (interfaces, POD types) sit at the group root.
+Related units are grouped under a parent folder.
+
 ```
-main.cpp            entry point: SDL3 window + loop
-Renderer/           renderer interface + backends
-shaders/            .sc sources (varying.def.sc, simple.vert, simple.frag)
-shaders/bin/        compiled shader binaries (build output, per-profile)
+main.cpp                            entry point: SDL3 window + loop
+Renderer/                           group: everything rendering
+  RendererTypes.hpp                 header-only -> group root
+  IRenderer.hpp                     header-only interface -> group root
+  SdlRenderer/SdlRenderer.{hpp,cpp} has a .cpp -> own directory
+  ...
+shaders/                            .sc sources (varying.def.sc, vs_simple.sc, fs_simple.sc)
 ```
 
 ## Workflow
