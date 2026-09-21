@@ -1,7 +1,7 @@
 /*
     Created on: 8/29/26
     Filename: main.cpp
-    Description: ${DESCRIPTION}
+    Description: Window creation and main loop.
 
     ███╗   ███╗███████╗████████╗██████╗  ██████╗ ██╗   ██╗
     ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██║   ██║
@@ -13,29 +13,26 @@
 
 #include <SDL3/SDL.h>
 #include <cstdio>
+#include <iostream>
+
+#include "Renderer/Renderer.hpp"
 
 int main(int argc, char** argv)
 {
     (void)argc;
     (void)argv;
 
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "x11");
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         std::printf("SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
 
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
     SDL_Window* window = SDL_CreateWindow(
         "renderer-wrapper",
         1280,
         720,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
+        SDL_WINDOW_RESIZABLE
     );
 
     if (!window) {
@@ -44,38 +41,37 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-    if (!gl_context) {
-        std::printf("SDL_GL_CreateContext failed: %s\n", SDL_GetError());
+    Renderer renderer;
+    if (!renderer.initialize(window)) {
+        std::printf("Renderer initialization failed\n");
         SDL_DestroyWindow(window);
         SDL_Quit();
         return 1;
     }
-
-    if (!SDL_GL_MakeCurrent(window, gl_context)) {
-        std::printf("SDL_GL_MakeCurrent failed: %s\n", SDL_GetError());
-        SDL_GL_DestroyContext(gl_context);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 1;
-    }
-
-    SDL_GL_SetSwapInterval(1);
 
     bool running = true;
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT) {
-                running = false;
+            switch (event.type) {
+                case SDL_EVENT_QUIT:
+                    running = false;
+                    break;
+                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    renderer.resize(
+                        static_cast<uint32_t>(event.window.data1),
+                        static_cast<uint32_t>(event.window.data2));
+                    break;
+                default:
+                    break;
             }
         }
 
-        SDL_GL_SwapWindow(window);
-        SDL_Delay(16);
+        // Paced by vsync inside bgfx::frame().
+        renderer.render();
     }
 
-    SDL_GL_DestroyContext(gl_context);
+    renderer.shutdown();
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
