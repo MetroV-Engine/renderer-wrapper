@@ -1,0 +1,107 @@
+/*
+    Created on: 10/4/26
+    Filename: BgfxRenderer.hpp
+    Description: bgfx backend: batched textured quads, camera as a GPU matrix.
+
+    ███╗   ███╗███████╗████████╗██████╗  ██████╗ ██╗   ██╗
+    ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██║   ██║
+    ██╔████╔██║█████╗     ██║   ██████╔╝██║   ██║██║   ██║
+    ██║╚██╔╝██║██╔══╝     ██║   ██╔══██╗██║   ██║╚██╗ ██╔╝
+    ██║ ╚═╝ ██║███████╗   ██║   ██║  ██║╚██████╔╝ ╚████╔╝
+    ╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝   ╚═══╝
+*/
+
+#ifndef RENDERER_WRAPPER_BGFXRENDERER_HPP
+#define RENDERER_WRAPPER_BGFXRENDERER_HPP
+
+#include "Renderer/IRenderer.hpp"
+#include "Renderer/BgfxProgram/BgfxProgram.hpp"
+#include "Renderer/CameraMatrix/CameraMatrix.hpp"
+
+#include <bgfx/bgfx.h>
+
+#include <array>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+struct SDL_Window;
+
+namespace gfx {
+
+    class BgfxRenderer final : public IRenderer {
+        public:
+            // Returns nullptr on failure, after logging the reason. bgfx is global: one instance at a time.
+            static std::unique_ptr<BgfxRenderer> create(SDL_Window* window, uint32_t width, uint32_t height);
+
+            ~BgfxRenderer() override;
+
+            void resize(uint32_t width, uint32_t height) override;
+
+            void beginFrame(Color clear) override;
+            void endFrame() override;
+
+            void setCamera(const Camera2D& camera) override;
+
+            TextureHandle createTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
+            void destroyTexture(TextureHandle texture) override;
+            Vec2 textureSize(TextureHandle texture) const override;
+
+            void drawRect(const RectDraw& draw) override;
+            void drawSprite(const SpriteDraw& draw) override;
+
+            const char* backendName() const override;
+
+        private:
+            struct Command {
+                enum class Kind : uint8_t { Rect, Sprite };
+
+                Kind kind = Kind::Rect;
+                RectDraw rect;
+                SpriteDraw sprite;
+            };
+
+            struct Texture {
+                bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
+                Vec2 size;
+            };
+
+            BgfxRenderer(uint32_t width, uint32_t height);
+
+            bool createResources();
+            void submit(const Command& command, Layer layer);
+            void submitLayer(const std::vector<Command>& commands, const Mat4& camera, const Mat4& identity);
+            void submitBatch(const Command* first, uint32_t count, const Mat4& camera, const Mat4& identity);
+            const Texture* find(TextureHandle texture) const;
+            void releasePending();
+
+            inline static bool s_alive = false;
+
+            std::unique_ptr<BgfxProgram> m_program;
+            bgfx::UniformHandle m_sampler = BGFX_INVALID_HANDLE;
+            bgfx::TextureHandle m_white = BGFX_INVALID_HANDLE;
+            bgfx::VertexLayout m_layout;
+            std::string m_name;
+
+            uint32_t m_width = 0;
+            uint32_t m_height = 0;
+            Camera2D m_camera;
+            Color m_clear;
+            bool m_inFrame = false;
+            bool m_dropRestOfFrame = false;
+
+            std::array<std::vector<Command>, LayerCount> m_layers{};
+            std::unordered_map<uint32_t, Texture> m_textures;
+            uint32_t m_nextTexture = 1;
+            std::vector<TextureHandle> m_pendingDestroy;
+
+            bool m_warnedOutsideFrame = false;
+            bool m_warnedLayerRange = false;
+            bool m_warnedInvalidTexture = false;
+            bool m_warnedTransient = false;
+    };
+
+}
+
+#endif //RENDERER_WRAPPER_BGFXRENDERER_HPP

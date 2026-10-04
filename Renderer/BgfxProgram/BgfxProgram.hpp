@@ -1,7 +1,7 @@
 /*
-    Created on: 8/29/26
-    Filename: Renderer.hpp
-    Description: bgfx-backed renderer owning the bgfx context and the drawn mesh.
+    Created on: 10/4/26
+    Filename: BgfxProgram.hpp
+    Description: RAII sprite shader program, embedded for the API bgfx picked.
 
     ███╗   ███╗███████╗████████╗██████╗  ██████╗ ██╗   ██╗
     ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██║   ██║
@@ -11,35 +11,29 @@
     ╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝   ╚═══╝
 */
 
+#ifndef RENDERER_WRAPPER_BGFXPROGRAM_HPP
+#define RENDERER_WRAPPER_BGFXPROGRAM_HPP
 
-#ifndef RENDERER_WRAPPER_RENDERER_HPP
-#define RENDERER_WRAPPER_RENDERER_HPP
-
-#include <SDL3/SDL.h>
 #include <bgfx/bgfx.h>
-#include <cstdint>
 
-class Renderer {
-    public:
-        bool initialize(SDL_Window* window);
-        void shutdown();
+namespace gfx {
 
-        // Back-buffer size in pixels; call on every window pixel-size change.
-        void resize(uint32_t width, uint32_t height);
-        void render();
+    // Construct after bgfx::init() and destroy before bgfx::shutdown(); check valid().
+    class BgfxProgram {
+        public:
+            BgfxProgram();
+            ~BgfxProgram();
 
-    private:
-        bool createProgram();
-        void createTriangleMesh();
-        void destroyMesh();
+            BgfxProgram(const BgfxProgram&) = delete;
+            BgfxProgram& operator=(const BgfxProgram&) = delete;
 
-        bgfx::VertexLayout m_layout{};
-        bgfx::VertexBufferHandle m_vbh{ bgfx::kInvalidHandle };
-        bgfx::ProgramHandle m_program{ bgfx::kInvalidHandle };
+            bool valid() const;
+            bgfx::ProgramHandle handle() const;
 
-        uint32_t m_windowWidth = 1280;
-        uint32_t m_windowHeight = 720;
-};
+        private:
+            bgfx::ProgramHandle m_program = BGFX_INVALID_HANDLE;
+    };
 
+}
 
-#endif //RENDERER_WRAPPER_RENDERER_HPP
+#endif //RENDERER_WRAPPER_BGFXPROGRAM_HPP

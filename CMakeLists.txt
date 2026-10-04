@@ -42,12 +42,12 @@ set(BGFX_SHADER_INCLUDE_PATH ${bgfx_SOURCE_DIR}/bgfx/src)
 include(${bgfx_SOURCE_DIR}/cmake/bgfxToolUtils.cmake)
 
 set(SHADER_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/shaders)
-# Both are embedded; Renderer picks the one matching the backend bgfx selected at runtime.
+# Both are embedded; BgfxProgram picks the one matching the backend bgfx selected at runtime.
 set(SHADER_PROFILES 430 spirv)
 
 bgfx_compile_shaders(
         TYPE VERTEX
-        SHADERS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/vs_simple.sc
+        SHADERS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/vs_sprite.sc
         VARYING_DEF ${CMAKE_CURRENT_SOURCE_DIR}/shaders/varying.def.sc
         OUTPUT_DIR ${SHADER_OUTPUT_DIR}
         PROFILES ${SHADER_PROFILES}
@@ -57,7 +57,7 @@ bgfx_compile_shaders(
 
 bgfx_compile_shaders(
         TYPE FRAGMENT
-        SHADERS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/fs_simple.sc
+        SHADERS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/fs_sprite.sc
         VARYING_DEF ${CMAKE_CURRENT_SOURCE_DIR}/shaders/varying.def.sc
         OUTPUT_DIR ${SHADER_OUTPUT_DIR}
         PROFILES ${SHADER_PROFILES}
@@ -85,6 +85,10 @@ add_library(renderer_core STATIC
         Renderer/NullRenderer/NullRenderer.hpp
         Renderer/SpriteAnimation/SpriteAnimation.cpp
         Renderer/SpriteAnimation/SpriteAnimation.hpp
+        Renderer/CameraMatrix/CameraMatrix.cpp
+        Renderer/CameraMatrix/CameraMatrix.hpp
+        Renderer/QuadBuilder/QuadBuilder.cpp
+        Renderer/QuadBuilder/QuadBuilder.hpp
 )
 target_include_directories(renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 renderer_wrapper_warnings(renderer_core)
@@ -98,8 +102,10 @@ add_executable(renderer_wrapper
         Renderer/SdlWindowBridge/SdlWindowBridge.hpp
         Renderer/SdlRenderer/SdlRenderer.cpp
         Renderer/SdlRenderer/SdlRenderer.hpp
-        Renderer/Renderer/Renderer.cpp
-        Renderer/Renderer/Renderer.hpp
+        Renderer/BgfxProgram/BgfxProgram.cpp
+        Renderer/BgfxProgram/BgfxProgram.hpp
+        Renderer/BgfxRenderer/BgfxRenderer.cpp
+        Renderer/BgfxRenderer/BgfxRenderer.hpp
         Tools/ImageLoader/ImageLoader.cpp
         Tools/ImageLoader/ImageLoader.hpp
         Playground/Player/Player.cpp
@@ -153,6 +159,8 @@ add_executable(renderer_tests
         Tests/TransformTests.cpp
         Tests/SpriteAnimationTests.cpp
         Tests/NullRendererTests.cpp
+        Tests/CameraMatrixTests.cpp
+        Tests/QuadBuilderTests.cpp
 )
 target_link_libraries(renderer_tests PRIVATE
         renderer_core

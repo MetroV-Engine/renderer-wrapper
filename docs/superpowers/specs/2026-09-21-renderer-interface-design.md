@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-21
 **Workspace:** `renderer-wrapper`
-**Status:** approved design, not yet implemented
+**Status:** phases 1-4 implemented; bgfx details in 2026-10-04-bgfx-backend-design.md
 
 ## 1. Purpose
 
@@ -215,7 +215,7 @@ beginFrame(clear) -> setCamera(cam) -> drawRect/drawSprite (xN) -> endFrame()
 ```
 
 - `beginFrame(clear)` clears the entire surface to `clear`, both spaces, every layer.
-- `setCamera` may be called at any point; it affects subsequent `Space::World` draws only.
+- `setCamera` may be called at any point in a frame; the camera set last before `endFrame()` applies to every `Space::World` draw of that frame. Per-layer cameras (parallax) are the planned mechanism for more than one view.
 - `endFrame()` presents. Nothing is guaranteed visible before it returns.
 - Draw calls outside a begin/end pair are ignored and logged once.
 
@@ -225,8 +225,7 @@ Layers draw in ascending order; within one layer, submission order is preserved.
 order is component-storage order and carries no meaning, so depth must be explicit.
 
 - Valid range: `0..63`. Out-of-range values are clamped, logged once.
-- **bgfx:** layer `n` maps to view id `n + 1`; view 0 is reserved for the frame clear. bgfx sorts
-  submissions per view internally.
+- **bgfx:** one sequential view per pass; layers are ordered by submission. See `2026-10-04-bgfx-backend-design.md`.
 - **SDL3 CPU:** one bucket per layer, flushed in ascending order inside `endFrame()`.
 
 ## 7. Resources
@@ -266,7 +265,7 @@ not a convention.
 
 | Backend | Purpose | Notes |
 |---|---|---|
-| `BgfxRenderer` | Target backend | Extracted from today's `Renderer`; one textured-quad program, layers as views |
+| `BgfxRenderer` | Target backend | Batched textured quads, camera as a GPU matrix (see 2026-10-04-bgfx-backend-design.md) |
 | `SdlRenderer` | UI team's interim backend | `SDL_Renderer` + `SDL_Texture`; camera applied through the shared `worldToScreen`, never through `SDL_SetRenderScale`, so both backends land pixels identically |
 | `NullRenderer` | Tests and CI | Records draw calls, renders nothing, needs no window |
 
@@ -292,8 +291,14 @@ Renderer/
     SdlRenderer.hpp/.cpp         SDL3 backend
   NullRenderer/
     NullRenderer.hpp/.cpp        records draws, needs no window
-  Renderer/
-    Renderer.hpp/.cpp            today's bgfx triangle; becomes BgfxRenderer/ in phase 1
+  QuadBuilder/
+    QuadBuilder.hpp/.cpp         draw -> 4 vertices, unit-tested
+  CameraMatrix/
+    CameraMatrix.hpp/.cpp        camera -> GPU matrix, unit-tested against worldToScreen
+  BgfxProgram/
+    BgfxProgram.hpp/.cpp         embedded sprite shaders
+  BgfxRenderer/
+    BgfxRenderer.hpp/.cpp        bgfx backend
 ```
 
 ## 12. ECS migration
@@ -308,11 +313,11 @@ pixels. `ScreenLocked` entities set `space = Space::Screen`.
 
 ## 13. Phases
 
-1. Extract `IRenderer` + `RendererTypes` + factory; today's `Renderer` becomes `BgfxRenderer`. The
-   triangle still renders, now through the interface.
-2. `NullRenderer` + unit tests for `worldToScreen` and for recorded draw calls.
-3. Textures and `drawSprite` on bgfx: textured-quad program, handle table, layers as views.
-4. `SdlRenderer` (SDL3 CPU) implementing the same interface, validated against the same tests.
+1. **Done (2026-10-04).** Extract `IRenderer` + `RendererTypes` + factory; today's `Renderer` becomes `BgfxRenderer`. The
+   test triangle was later replaced by sprite rendering (see 2026-10-04-bgfx-backend-design.md).
+2. **Done (2026-10-04).** `NullRenderer` + unit tests for `worldToScreen` and for recorded draw calls.
+3. **Done (2026-10-04).** Textures and `drawSprite` on bgfx: textured-quad program, handle table, batched quads on one sequential view.
+4. **Done (2026-10-04).** `SdlRenderer` (SDL3 CPU) implementing the same interface, validated against the same tests.
 5. ECS migration: `DrawableSys` and friends take `IRenderer&`.
 6. Editor integration: child viewport window, `resize()` on rect change.
 
@@ -322,5 +327,4 @@ pixels. `ScreenLocked` entities set `space = Space::Screen`.
 |---|---|
 | SDL3 popup windows are meant for transient menus; using one as a persistent viewport is off the beaten path | Spike it on X11 **and** Wayland before phase 6 commits; the sub-rect alternative in section 1.1 avoids the question entirely |
 | ImGui popups overlapping the viewport are occluded by the native child window | Editor enables `ImGuiConfigFlags_ViewportsEnable` so popups become real OS windows |
-| bgfx caps view count (256 by default) | 64 layers map to views 1..64, leaving ample headroom |
 | The two backends' transforms drift apart | Single shared `worldToScreen`, unit-tested once |

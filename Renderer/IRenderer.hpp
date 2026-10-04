@@ -33,6 +33,7 @@ namespace gfx {
             virtual void beginFrame(Color clear) = 0;
             virtual void endFrame() = 0;
 
+            // The camera set last before endFrame() applies to every World draw of the frame.
             virtual void setCamera(const Camera2D& camera) = 0;
 
             // Pixels are tightly packed RGBA8 and are copied; the caller may free them on return.

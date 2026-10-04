@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Tools/ImageLoader/ImageLoader.hpp"
@@ -68,6 +69,26 @@ namespace {
         return std::string(base != nullptr ? base : "") + "assets/" + relative;
     }
 
+    // The play button runs bgfx; a second run configuration passes --backend=sdl.
+    std::optional<gfx::Backend> parseBackend(const int argc, char** argv)
+    {
+        gfx::Backend backend = gfx::Backend::Bgfx;
+
+        for (int i = 1; i < argc; ++i) {
+            const std::string_view argument = argv[i];
+            if (argument == "--backend=bgfx") {
+                backend = gfx::Backend::Bgfx;
+            } else if (argument == "--backend=sdl") {
+                backend = gfx::Backend::Sdl3Cpu;
+            } else {
+                std::printf("unknown argument: %s\nusage: renderer_wrapper [--backend=bgfx|sdl]\n", argv[i]);
+                return std::nullopt;
+            }
+        }
+
+        return backend;
+    }
+
     void panWithKeyboard(gfx::Camera2D& camera, const float deltaSeconds)
     {
         const bool* keys = SDL_GetKeyboardState(nullptr);
@@ -97,8 +118,10 @@ namespace {
 
 int main(int argc, char** argv)
 {
-    (void)argc;
-    (void)argv;
+    const std::optional<gfx::Backend> backend = parseBackend(argc, argv);
+    if (!backend.has_value()) {
+        return 1;
+    }
 
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "x11");
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -114,10 +137,9 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    std::unique_ptr<gfx::IRenderer> renderer =
-        gfx::makeRenderer(gfx::Backend::Sdl3Cpu, window, WindowWidth, WindowHeight);
+    std::unique_ptr<gfx::IRenderer> renderer = gfx::makeRenderer(*backend, window, WindowWidth, WindowHeight);
     if (renderer == nullptr) {
-        std::printf("Renderer creation failed\n");
+        std::printf("Renderer creation failed (try --backend=sdl)\n");
         SDL_DestroyWindow(window);
         SDL_Quit();
         return 1;
