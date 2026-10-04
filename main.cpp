@@ -123,7 +123,7 @@ int main(int argc, char** argv)
 
     std::printf("backend: %s\n", renderer->backendName());
     std::printf("Tab or HUD button toggles edit/play | edit: WASD/arrows pan | play: A/D/arrows walk\n");
-    std::printf("mouse wheel zooms | escape quits\n");
+    std::printf("edit: mouse wheel zooms | escape quits\n");
 
     const std::optional<tools::Image> sheet = tools::loadPng(assetPath("bongo_marche_spritesheet.png"));
     const gfx::TextureHandle bullTexture = sheet.has_value()
@@ -159,6 +159,7 @@ int main(int argc, char** argv)
             if (modeToggle.handleEvent(event)) {
                 if (modeToggle.mode() == playground::Mode::Play) {
                     camera.center = gfx::Vec2{ player.position().x, player.position().y - PlayFocusAbove };
+                    camera.zoom = 1.0f;     // play mode cannot zoom, so do not inherit the editor's zoom
                 } else {
                     player.stand();
                 }
@@ -176,7 +177,9 @@ int main(int argc, char** argv)
                     break;
 
                 case SDL_EVENT_MOUSE_WHEEL:
-                    zoom(camera, event.wheel.y > 0.0f ? ZoomStep : 1.0f / ZoomStep);
+                    if (modeToggle.mode() == playground::Mode::Edit) {
+                        zoom(camera, event.wheel.y > 0.0f ? ZoomStep : 1.0f / ZoomStep);
+                    }
                     break;
 
                 case SDL_EVENT_KEY_DOWN:
