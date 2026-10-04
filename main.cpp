@@ -1,7 +1,7 @@
 /*
     Created on: 8/29/26
     Filename: main.cpp
-    Description: SDL3 playground: pan and zoom over a few rectangles through IRenderer.
+    Description: SDL3 playground: edit mode pans the scene, play mode walks the bull (Tab or HUD button).
 
     ███╗   ███╗███████╗████████╗██████╗  ██████╗ ██╗   ██╗
     ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██║   ██║
@@ -15,14 +15,22 @@
 
 #include <cstdio>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
+#include "Tools/ImageLoader/ImageLoader.hpp"
+#include "Playground/ModeToggle/ModeToggle.hpp"
+#include "Playground/Player/Player.hpp"
 #include "Renderer/RendererFactory/RendererFactory.hpp"
 
 namespace {
 
     constexpr uint32_t WindowWidth = 1280;
     constexpr uint32_t WindowHeight = 720;
+
+    constexpr float GroundTop = 600.0f;
+    constexpr float PlayFocusAbove = 240.0f;    // camera centre above the bull's feet, as at startup
 
     constexpr float PanSpeed = 700.0f;      // world units per second at zoom 1
     constexpr float ZoomStep = 1.12f;
@@ -32,7 +40,6 @@ namespace {
     constexpr gfx::Color Background{ 24, 26, 32, 255 };
     constexpr gfx::Color Ground{ 60, 72, 58, 255 };
     constexpr gfx::Color Platform{ 92, 104, 128, 255 };
-    constexpr gfx::Color Player{ 226, 122, 96, 255 };
     constexpr gfx::Color Hud{ 255, 255, 255, 40 };
 
     // Wide enough that panning has somewhere to go.
@@ -40,7 +47,7 @@ namespace {
     {
         std::vector<gfx::RectDraw> scene;
 
-        scene.push_back({ gfx::Rect{ -2000.0f, 600.0f, 6000.0f, 120.0f }, Ground, 0, gfx::Space::World });
+        scene.push_back({ gfx::Rect{ -2000.0f, GroundTop, 6000.0f, 120.0f }, Ground, 0, gfx::Space::World });
 
         for (int i = 0; i < 8; ++i) {
             const auto x = static_cast<float>(-800 + i * 320);
@@ -48,9 +55,15 @@ namespace {
             scene.push_back({ gfx::Rect{ x, y, 180.0f, 28.0f }, Platform, 1, gfx::Space::World });
         }
 
-        scene.push_back({ gfx::Rect{ 40.0f, 520.0f, 48.0f, 80.0f }, Player, 2, gfx::Space::World });
-
         return scene;
+    }
+
+    // CLion runs from the build directory: resolve next to the binary, where CMake copies assets/.
+    std::string assetPath(const char* relative)
+    {
+        const char* base = SDL_GetBasePath();
+
+        return std::string(base != nullptr ? base : "") + "assets/" + relative;
     }
 
     void panWithKeyboard(gfx::Camera2D& camera, const float deltaSeconds)
@@ -109,7 +122,23 @@ int main(int argc, char** argv)
     }
 
     std::printf("backend: %s\n", renderer->backendName());
-    std::printf("arrows or WASD pan | mouse wheel zooms | escape quits\n");
+    std::printf("Tab or HUD button toggles edit/play | edit: WASD/arrows pan | play: A/D/arrows walk\n");
+    std::printf("mouse wheel zooms | escape quits\n");
+
+    const std::optional<tools::Image> sheet = tools::loadPng(assetPath("bongo_marche_spritesheet.png"));
+    const gfx::TextureHandle bullTexture = sheet.has_value()
+        ? renderer->createTexture(sheet->rgba.data(), sheet->width, sheet->height)
+        : gfx::TextureHandle::Invalid;
+    if (bullTexture == gfx::TextureHandle::Invalid) {
+        std::printf("Could not load the bull sprite sheet\n");
+        renderer.reset();
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return 1;
+    }
+
+    playground::Player player(bullTexture, gfx::Vec2{ 120.0f, GroundTop });
+    playground::ModeToggle modeToggle(playground::Mode::Edit);
 
     const std::vector<gfx::RectDraw> scene = makeScene();
 
@@ -127,6 +156,14 @@ int main(int argc, char** argv)
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
+            if (modeToggle.handleEvent(event)) {
+                if (modeToggle.mode() == playground::Mode::Play) {
+                    camera.center = gfx::Vec2{ player.position().x, player.position().y - PlayFocusAbove };
+                } else {
+                    player.stand();
+                }
+            }
+
             switch (event.type) {
                 case SDL_EVENT_QUIT:
                     running = false;
@@ -153,7 +190,12 @@ int main(int argc, char** argv)
             }
         }
 
-        panWithKeyboard(camera, deltaSeconds);
+        if (modeToggle.mode() == playground::Mode::Play) {
+            player.update(deltaSeconds);
+            camera.center.x = player.position().x;
+        } else {
+            panWithKeyboard(camera, deltaSeconds);
+        }
 
         renderer->beginFrame(Background);
         renderer->setCamera(camera);
@@ -162,11 +204,16 @@ int main(int argc, char** argv)
             renderer->drawRect(object);
         }
 
+        renderer->drawSprite(player.sprite());
+
         // Screen space ignores the camera: this bar stays put while the world scrolls under it.
         renderer->drawRect({ gfx::Rect{ 0.0f, 0.0f, viewport.x, 36.0f }, Hud, 10, gfx::Space::Screen });
+        modeToggle.draw(*renderer);
 
         renderer->endFrame();
     }
+
+    renderer->destroyTexture(bullTexture);
 
     // The renderer holds an SDL_Renderer tied to this window: release it before the window dies.
     renderer.reset();

@@ -65,6 +65,9 @@ Renderer/                           group: everything rendering
   IRenderer.hpp                     header-only interface -> group root
   SdlRenderer/SdlRenderer.{hpp,cpp} has a .cpp -> own directory
   ...
+Tools/                              group: backend-free helpers (e.g. ImageLoader: PNG -> RGBA8)
+Playground/                         group: playground-only code (e.g. Player)
+assets/                             data only (images); copied next to the binary at build time
 shaders/                            .sc sources (varying.def.sc, vs_simple.sc, fs_simple.sc)
 ```
 

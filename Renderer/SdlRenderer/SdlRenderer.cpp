@@ -219,6 +219,7 @@ namespace gfx {
         command.source = draw.source;
         command.dest = draw.dest;
         command.rotation = draw.rotation;
+        command.flipX = draw.flipX;
         command.color = draw.tint;
         command.space = draw.space;
 
@@ -278,7 +279,7 @@ namespace gfx {
         const bool wholeTexture = command.source.w <= 0.0f || command.source.h <= 0.0f;
 
         SDL_RenderTextureRotated(m_renderer, texture, wholeTexture ? nullptr : &source, &destination,
-            toDegrees(command.rotation), nullptr, SDL_FLIP_NONE);
+            toDegrees(command.rotation), nullptr, command.flipX ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
     }
 
     SDL_Texture* SdlRenderer::find(const TextureHandle texture) const

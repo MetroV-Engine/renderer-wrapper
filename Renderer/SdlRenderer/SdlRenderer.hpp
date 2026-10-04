@@ -60,6 +60,7 @@ namespace gfx {
                 Rect source;
                 Rect dest;
                 float rotation = 0.0f;
+                bool flipX = false;
                 Color color;
                 Space space = Space::World;
             };

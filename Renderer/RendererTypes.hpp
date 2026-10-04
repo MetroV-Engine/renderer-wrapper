@@ -67,6 +67,7 @@ namespace gfx {
         Rect source;                // w or h <= 0 means the whole texture
         Rect dest;
         float rotation = 0.0f;      // radians, clockwise, about the centre of dest
+        bool flipX = false;         // mirrors the source horizontally inside dest
         Layer layer = MinLayer;
         Space space = Space::World;
         Color tint = White;

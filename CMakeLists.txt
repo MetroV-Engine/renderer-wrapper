@@ -82,6 +82,14 @@ add_executable(renderer_wrapper
         Renderer/NullRenderer/NullRenderer.hpp
         Renderer/Renderer/Renderer.cpp
         Renderer/Renderer/Renderer.hpp
+        Renderer/SpriteAnimation/SpriteAnimation.cpp
+        Renderer/SpriteAnimation/SpriteAnimation.hpp
+        Tools/ImageLoader/ImageLoader.cpp
+        Tools/ImageLoader/ImageLoader.hpp
+        Playground/Player/Player.cpp
+        Playground/Player/Player.hpp
+        Playground/ModeToggle/ModeToggle.cpp
+        Playground/ModeToggle/ModeToggle.hpp
         # As sources, these run shaderc before compiling and again on every .sc edit.
         ${VERTEX_SHADER_HEADERS}
         ${FRAGMENT_SHADER_HEADERS}
@@ -97,6 +105,13 @@ target_link_libraries(renderer_wrapper PRIVATE
         bgfx
         bx
         bimg
+)
+
+# Assets live next to the binary: the code resolves them from SDL_GetBasePath(), never the cwd.
+add_custom_command(TARGET renderer_wrapper POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets
+                $<TARGET_FILE_DIR:renderer_wrapper>/assets
 )
 
 if (MSVC)
