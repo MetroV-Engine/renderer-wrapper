@@ -65,42 +65,60 @@ bgfx_compile_shaders(
         OUT_FILES_VAR FRAGMENT_SHADER_HEADERS
 )
 
-# --- Executable --------------------------------------------------------------
-add_executable(renderer_wrapper
-        main.cpp
+# Warnings are per target so fetched dependencies (bgfx, googletest) keep their own flags.
+function(renderer_wrapper_warnings target)
+    if (MSVC)
+        target_compile_options(${target} PRIVATE /W4)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+endfunction()
+
+# --- Backend-free core -------------------------------------------------------
+# No SDL, no bgfx: the playground and the headless tests both link it.
+add_library(renderer_core STATIC
         Renderer/RendererTypes.hpp
         Renderer/IRenderer.hpp
         Renderer/Transform/Transform.cpp
         Renderer/Transform/Transform.hpp
+        Renderer/NullRenderer/NullRenderer.cpp
+        Renderer/NullRenderer/NullRenderer.hpp
+        Renderer/SpriteAnimation/SpriteAnimation.cpp
+        Renderer/SpriteAnimation/SpriteAnimation.hpp
+)
+target_include_directories(renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+renderer_wrapper_warnings(renderer_core)
+
+# --- Executable --------------------------------------------------------------
+add_executable(renderer_wrapper
+        main.cpp
         Renderer/RendererFactory/RendererFactory.cpp
         Renderer/RendererFactory/RendererFactory.hpp
         Renderer/SdlWindowBridge/SdlWindowBridge.cpp
         Renderer/SdlWindowBridge/SdlWindowBridge.hpp
         Renderer/SdlRenderer/SdlRenderer.cpp
         Renderer/SdlRenderer/SdlRenderer.hpp
-        Renderer/NullRenderer/NullRenderer.cpp
-        Renderer/NullRenderer/NullRenderer.hpp
         Renderer/Renderer/Renderer.cpp
         Renderer/Renderer/Renderer.hpp
-        Renderer/SpriteAnimation/SpriteAnimation.cpp
-        Renderer/SpriteAnimation/SpriteAnimation.hpp
         Tools/ImageLoader/ImageLoader.cpp
         Tools/ImageLoader/ImageLoader.hpp
         Playground/Player/Player.cpp
         Playground/Player/Player.hpp
         Playground/ModeToggle/ModeToggle.cpp
         Playground/ModeToggle/ModeToggle.hpp
+        Playground/Showcase/Showcase.cpp
+        Playground/Showcase/Showcase.hpp
         # As sources, these run shaderc before compiling and again on every .sc edit.
         ${VERTEX_SHADER_HEADERS}
         ${FRAGMENT_SHADER_HEADERS}
 )
 
 target_include_directories(renderer_wrapper PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_BINARY_DIR}  # generated/shaders/<profile>/*.bin.h
 )
 
 target_link_libraries(renderer_wrapper PRIVATE
+        renderer_core
         SDL3::SDL3
         bgfx
         bx
@@ -114,8 +132,33 @@ add_custom_command(TARGET renderer_wrapper POST_BUILD
                 $<TARGET_FILE_DIR:renderer_wrapper>/assets
 )
 
-if (MSVC)
-    target_compile_options(renderer_wrapper PRIVATE /W4)
-else()
-    target_compile_options(renderer_wrapper PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+renderer_wrapper_warnings(renderer_wrapper)
+
+# --- Unit tests --------------------------------------------------------------
+# Headless: only renderer_core, so they run without a window or GPU.
+FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        v1.18.0
+        GIT_SHALLOW    TRUE
+)
+set(INSTALL_GTEST OFF)
+set(BUILD_GMOCK OFF)
+set(gtest_force_shared_crt ON)    # MSVC: link the same C runtime as our targets
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+
+add_executable(renderer_tests
+        Tests/TransformTests.cpp
+        Tests/SpriteAnimationTests.cpp
+        Tests/NullRendererTests.cpp
+)
+target_link_libraries(renderer_tests PRIVATE
+        renderer_core
+        GTest::gtest_main
+)
+renderer_wrapper_warnings(renderer_tests)
+
+include(GoogleTest)
+gtest_discover_tests(renderer_tests)

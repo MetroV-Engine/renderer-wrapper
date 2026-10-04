@@ -22,6 +22,7 @@
 #include "Tools/ImageLoader/ImageLoader.hpp"
 #include "Playground/ModeToggle/ModeToggle.hpp"
 #include "Playground/Player/Player.hpp"
+#include "Playground/Showcase/Showcase.hpp"
 #include "Renderer/RendererFactory/RendererFactory.hpp"
 
 namespace {
@@ -31,6 +32,7 @@ namespace {
 
     constexpr float GroundTop = 600.0f;
     constexpr float PlayFocusAbove = 240.0f;    // camera centre above the bull's feet, as at startup
+    constexpr gfx::Vec2 ShowcaseCenter{ -70.0f, 170.0f };   // above the third platform
 
     constexpr float PanSpeed = 700.0f;      // world units per second at zoom 1
     constexpr float ZoomStep = 1.12f;
@@ -124,6 +126,7 @@ int main(int argc, char** argv)
     std::printf("backend: %s\n", renderer->backendName());
     std::printf("Tab or HUD button toggles edit/play | edit: WASD/arrows pan | play: A/D/arrows walk\n");
     std::printf("edit: mouse wheel zooms | escape quits\n");
+    std::printf("checks: R reloads the showcase texture mid-frame | F forces renderer misuse warnings\n");
 
     const std::optional<tools::Image> sheet = tools::loadPng(assetPath("bongo_marche_spritesheet.png"));
     const gfx::TextureHandle bullTexture = sheet.has_value()
@@ -139,6 +142,10 @@ int main(int argc, char** argv)
 
     playground::Player player(bullTexture, gfx::Vec2{ 120.0f, GroundTop });
     playground::ModeToggle modeToggle(playground::Mode::Edit);
+
+    // Holds a texture on the renderer: optional so it can be released before the renderer dies.
+    std::optional<playground::Showcase> showcase;
+    showcase.emplace(*renderer, *sheet, ShowcaseCenter);
 
     const std::vector<gfx::RectDraw> scene = makeScene();
 
@@ -185,6 +192,12 @@ int main(int argc, char** argv)
                 case SDL_EVENT_KEY_DOWN:
                     if (event.key.scancode == SDL_SCANCODE_ESCAPE) {
                         running = false;
+                    } else if (event.key.repeat) {
+                        break;
+                    } else if (event.key.scancode == SDL_SCANCODE_R) {
+                        showcase->requestReload();
+                    } else if (event.key.scancode == SDL_SCANCODE_F) {
+                        showcase->misuse();
                     }
                     break;
 
@@ -199,6 +212,7 @@ int main(int argc, char** argv)
         } else {
             panWithKeyboard(camera, deltaSeconds);
         }
+        showcase->update(deltaSeconds);
 
         renderer->beginFrame(Background);
         renderer->setCamera(camera);
@@ -208,6 +222,7 @@ int main(int argc, char** argv)
         }
 
         renderer->drawSprite(player.sprite());
+        showcase->draw(viewport);
 
         // Screen space ignores the camera: this bar stays put while the world scrolls under it.
         renderer->drawRect({ gfx::Rect{ 0.0f, 0.0f, viewport.x, 36.0f }, Hud, 10, gfx::Space::Screen });
@@ -216,6 +231,7 @@ int main(int argc, char** argv)
         renderer->endFrame();
     }
 
+    showcase.reset();
     renderer->destroyTexture(bullTexture);
 
     // The renderer holds an SDL_Renderer tied to this window: release it before the window dies.

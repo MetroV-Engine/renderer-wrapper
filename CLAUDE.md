@@ -66,7 +66,8 @@ Renderer/                           group: everything rendering
   SdlRenderer/SdlRenderer.{hpp,cpp} has a .cpp -> own directory
   ...
 Tools/                              group: backend-free helpers (e.g. ImageLoader: PNG -> RGBA8)
-Playground/                         group: playground-only code (e.g. Player)
+Playground/                         group: playground-only code (e.g. Player, ModeToggle, Showcase)
+Tests/                              GoogleTest files, flat: <Unit>Tests.cpp (no header, so no own folder)
 assets/                             data only (images); copied next to the binary at build time
 shaders/                            .sc sources (varying.def.sc, vs_simple.sc, fs_simple.sc)
 ```
