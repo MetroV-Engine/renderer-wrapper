@@ -13,6 +13,10 @@
 
 #include "Renderer/NullRenderer/NullRenderer.hpp"
 
+#include "Renderer/ShapeBuilder/ShapeBuilder.hpp"
+
+#include <utility>
+
 namespace gfx {
 
     NullRenderer::NullRenderer(const uint32_t width, const uint32_t height)
@@ -95,6 +99,28 @@ namespace gfx {
         entry.kind = Recorded::Kind::Sprite;
         entry.sprite = draw;
         m_recorded.push_back(entry);
+    }
+
+    void NullRenderer::drawMesh(const MeshDraw& draw)
+    {
+        if (draw.vertices.empty() || draw.indices.empty() || !m_inFrame) {
+            return;
+        }
+
+        const bool knownTexture = draw.texture == TextureHandle::Invalid
+            || m_textures.contains(static_cast<uint32_t>(draw.texture));
+        if (!isValidMesh(draw.vertices, draw.indices) || !knownTexture) {
+            return;
+        }
+
+        Recorded entry;
+        entry.kind = Recorded::Kind::Mesh;
+        entry.meshVertices.assign(draw.vertices.begin(), draw.vertices.end());
+        entry.meshIndices.assign(draw.indices.begin(), draw.indices.end());
+        entry.meshTexture = draw.texture;
+        entry.meshLayer = draw.layer;
+        entry.meshSpace = draw.space;
+        m_recorded.push_back(std::move(entry));
     }
 
     const char* NullRenderer::backendName() const

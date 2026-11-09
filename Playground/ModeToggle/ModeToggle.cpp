@@ -19,8 +19,8 @@ namespace playground {
 
     namespace {
         constexpr gfx::Rect Button{ 4.0f, 4.0f, 28.0f, 28.0f };
-        constexpr gfx::Layer ButtonLayer = 11;      // the HUD bar is on 10
-        constexpr gfx::Layer IconLayer = 12;
+        constexpr gfx::Layer ButtonLayer = gfx::Layer::Foreground;
+        constexpr gfx::Layer IconLayer = gfx::Layer::Foreground;
 
         constexpr gfx::Color PlayColor{ 64, 170, 96, 255 };
         constexpr gfx::Color EditColor{ 72, 120, 200, 255 };
@@ -80,12 +80,13 @@ namespace playground {
         if (m_mode == Mode::Play) {
             drawScreenRect(renderer, Button, PlayColor, ButtonLayer);
 
-            // Rect-only renderer: the arrow is a stack of shrinking strips.
-            for (int strip = 0; strip < 6; ++strip) {
-                const float height = 16.0f - static_cast<float>(strip) * 3.0f;
-                const gfx::Rect rect{ centerX - 6.0f + static_cast<float>(strip) * 2.0f, centerY - height * 0.5f, 2.0f, height };
-                drawScreenRect(renderer, rect, gfx::White, IconLayer);
-            }
+            gfx::TriangleDraw icon;
+            icon.points = { gfx::Vec2{ centerX - 6.0f, centerY - 8.0f }, gfx::Vec2{ centerX + 6.0f, centerY },
+                            gfx::Vec2{ centerX - 6.0f, centerY + 8.0f } };
+            icon.color = gfx::White;
+            icon.layer = IconLayer;
+            icon.space = gfx::Space::Screen;
+            renderer.drawTriangle(icon);
             return;
         }
 

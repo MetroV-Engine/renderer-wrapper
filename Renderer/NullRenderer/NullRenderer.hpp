@@ -24,11 +24,16 @@ namespace gfx {
     class NullRenderer final : public IRenderer {
         public:
             struct Recorded {
-                enum class Kind : uint8_t { Rect, Sprite };
+                enum class Kind : uint8_t { Rect, Sprite, Mesh };
 
                 Kind kind = Kind::Rect;
                 RectDraw rect;
                 SpriteDraw sprite;
+                std::vector<Vertex> meshVertices;
+                std::vector<uint16_t> meshIndices;
+                TextureHandle meshTexture = TextureHandle::Invalid;
+                Layer meshLayer = Layer::Game;
+                Space meshSpace = Space::World;
             };
 
             NullRenderer(uint32_t width, uint32_t height);
@@ -46,6 +51,7 @@ namespace gfx {
 
             void drawRect(const RectDraw& draw) override;
             void drawSprite(const SpriteDraw& draw) override;
+            void drawMesh(const MeshDraw& draw) override;
 
             const char* backendName() const override;
 

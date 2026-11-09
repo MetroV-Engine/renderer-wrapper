@@ -25,6 +25,7 @@
 struct SDL_Window;
 struct SDL_Renderer;
 struct SDL_Texture;
+struct SDL_Vertex;
 
 namespace gfx {
 
@@ -48,12 +49,13 @@ namespace gfx {
 
             void drawRect(const RectDraw& draw) override;
             void drawSprite(const SpriteDraw& draw) override;
+            void drawMesh(const MeshDraw& draw) override;
 
             const char* backendName() const override;
 
         private:
             struct Command {
-                enum class Kind : uint8_t { Rect, Sprite };
+                enum class Kind : uint8_t { Rect, Sprite, Mesh };
 
                 Kind kind = Kind::Rect;
                 TextureHandle texture = TextureHandle::Invalid;
@@ -63,12 +65,20 @@ namespace gfx {
                 bool flipX = false;
                 Color color;
                 Space space = Space::World;
+
+                // Mesh only: ranges into the frame arenas.
+                uint32_t firstVertex = 0;
+                uint32_t vertexCount = 0;
+                uint32_t firstIndex = 0;
+                uint32_t indexCount = 0;
             };
 
             SdlRenderer(SDL_Renderer* renderer, uint32_t width, uint32_t height);
 
+            bool inFrameOrWarn();
             void submit(const Command& command, Layer layer);
-            void flush(const Command& command) const;
+            void flush(const Command& command);
+            void flushMesh(const Command& command);
             SDL_Texture* find(TextureHandle texture) const;
             void releasePending();
 
@@ -81,13 +91,18 @@ namespace gfx {
             bool m_inFrame = false;
 
             std::array<std::vector<Command>, LayerCount> m_layers{};
+            std::vector<Vertex> m_meshVertices;
+            std::vector<uint16_t> m_meshIndices;
+            // Reused across flushes; SDL_Vertex stays incomplete in this header, and every use is in the .cpp.
+            std::vector<SDL_Vertex> m_geometryVertices;
+            std::vector<int> m_geometryIndices;
             std::unordered_map<uint32_t, SDL_Texture*> m_textures;
             uint32_t m_nextTexture = 1;
             std::vector<TextureHandle> m_pendingDestroy;
 
             bool m_warnedOutsideFrame = false;
-            bool m_warnedLayerRange = false;
             bool m_warnedInvalidTexture = false;
+            bool m_warnedInvalidMesh = false;
     };
 
 }

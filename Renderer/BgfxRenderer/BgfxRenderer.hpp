@@ -1,7 +1,7 @@
 /*
     Created on: 10/4/26
     Filename: BgfxRenderer.hpp
-    Description: bgfx backend: batched textured quads, camera as a GPU matrix.
+    Description: bgfx backend: batched textured quads and meshes, camera as a GPU matrix.
 
     ███╗   ███╗███████╗████████╗██████╗  ██████╗ ██╗   ██╗
     ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██║   ██║
@@ -50,16 +50,25 @@ namespace gfx {
 
             void drawRect(const RectDraw& draw) override;
             void drawSprite(const SpriteDraw& draw) override;
+            void drawMesh(const MeshDraw& draw) override;
 
             const char* backendName() const override;
 
         private:
             struct Command {
-                enum class Kind : uint8_t { Rect, Sprite };
+                enum class Kind : uint8_t { Rect, Sprite, Mesh };
 
                 Kind kind = Kind::Rect;
                 RectDraw rect;
                 SpriteDraw sprite;
+
+                // Mesh only: ranges into the frame arenas.
+                uint32_t firstVertex = 0;
+                uint32_t vertexCount = 0;
+                uint32_t firstIndex = 0;
+                uint32_t indexCount = 0;
+                TextureHandle texture = TextureHandle::Invalid;
+                Space space = Space::World;
             };
 
             struct Texture {
@@ -69,7 +78,13 @@ namespace gfx {
 
             BgfxRenderer(uint32_t width, uint32_t height);
 
+            static TextureHandle textureOf(const Command& command);
+            static Space spaceOf(const Command& command);
+            static uint32_t vertexCountOf(const Command& command);
+            static uint32_t indexCountOf(const Command& command);
+
             bool createResources();
+            bool inFrameOrWarn();
             void submit(const Command& command, Layer layer);
             void submitLayer(const std::vector<Command>& commands, const Mat4& camera, const Mat4& identity);
             void submitBatch(const Command* first, uint32_t count, const Mat4& camera, const Mat4& identity);
@@ -92,13 +107,15 @@ namespace gfx {
             bool m_dropRestOfFrame = false;
 
             std::array<std::vector<Command>, LayerCount> m_layers{};
+            std::vector<Vertex> m_meshVertices;
+            std::vector<uint16_t> m_meshIndices;
             std::unordered_map<uint32_t, Texture> m_textures;
             uint32_t m_nextTexture = 1;
             std::vector<TextureHandle> m_pendingDestroy;
 
             bool m_warnedOutsideFrame = false;
-            bool m_warnedLayerRange = false;
             bool m_warnedInvalidTexture = false;
+            bool m_warnedInvalidMesh = false;
             bool m_warnedTransient = false;
     };
 

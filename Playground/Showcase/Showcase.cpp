@@ -26,8 +26,8 @@ namespace playground {
         constexpr float SpinSpeed = 1.0f;       // radians per second
         constexpr float HudStripHeight = 28.0f;
         constexpr float HudMargin = 4.0f;
-        constexpr gfx::Layer BullLayer = 2;
-        constexpr gfx::Layer HudLayer = 11;     // the HUD bar is on 10
+        constexpr gfx::Layer BullLayer = gfx::Layer::Game;
+        constexpr gfx::Layer HudLayer = gfx::Layer::Foreground;
 
         uint8_t wave(const float time, const float phase)
         {
@@ -101,15 +101,11 @@ namespace playground {
     {
         std::cerr << "[Showcase] forcing misuse: expect one warning per call (first press only for one-shot ones)\n";
 
-        const gfx::RectDraw marker{ gfx::Rect{ 0.0f, 0.0f, 8.0f, 8.0f }, gfx::White, 0, gfx::Space::Screen };
+        const gfx::RectDraw marker{ gfx::Rect{ 0.0f, 0.0f, 8.0f, 8.0f }, gfx::White, gfx::Layer::Foreground, gfx::Space::Screen };
 
         m_renderer.drawRect(marker);                // outside a frame
         m_renderer.beginFrame(gfx::Black);
         m_renderer.beginFrame(gfx::Black);          // twice
-
-        gfx::RectDraw outOfRange = marker;
-        outOfRange.layer = 99;
-        m_renderer.drawRect(outOfRange);            // clamped to the top layer
 
         m_renderer.drawSprite(gfx::SpriteDraw{});   // invalid texture handle
 

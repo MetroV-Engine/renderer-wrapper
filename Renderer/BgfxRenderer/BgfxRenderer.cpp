@@ -1,7 +1,7 @@
 /*
     Created on: 10/4/26
     Filename: BgfxRenderer.cpp
-    Description: bgfx backend: batched textured quads, camera as a GPU matrix.
+    Description: bgfx backend: batched textured quads and meshes, camera as a GPU matrix.
 
     ███╗   ███╗███████╗████████╗██████╗  ██████╗ ██╗   ██╗
     ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██║   ██║
@@ -15,6 +15,7 @@
 
 #include "Renderer/QuadBuilder/QuadBuilder.hpp"
 #include "Renderer/SdlWindowBridge/SdlWindowBridge.hpp"
+#include "Renderer/ShapeBuilder/ShapeBuilder.hpp"
 
 #include <bx/math.h>
 
@@ -29,8 +30,6 @@ namespace gfx {
         constexpr uint32_t SamplerFlags = BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
         // No depth: order is submission order inside one sequential view.
         constexpr uint64_t DrawState = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_BLEND_ALPHA;
-        // 16-bit indices address at most 65 536 vertices per submit.
-        constexpr uint32_t MaxQuadsPerBatch = 65536 / 4;
 
         uint32_t toRgba(const Color color)
         {
@@ -118,9 +117,9 @@ namespace gfx {
 
     bool BgfxRenderer::createResources()
     {
-        if (m_layout.getStride() != sizeof(QuadVertex)) {
+        if (m_layout.getStride() != sizeof(Vertex)) {
             std::cerr << "[BgfxRenderer] ERROR: vertex layout stride " << m_layout.getStride()
-                      << " != sizeof(QuadVertex) " << sizeof(QuadVertex) << "\n";
+                      << " != sizeof(Vertex) " << sizeof(Vertex) << "\n";
             return false;
         }
 
@@ -169,6 +168,8 @@ namespace gfx {
         for (auto& layer : m_layers) {
             layer.clear();
         }
+        m_meshVertices.clear();
+        m_meshIndices.clear();
 
         m_clear = clear;
         m_inFrame = true;
@@ -296,48 +297,113 @@ namespace gfx {
         submit(command, draw.layer);
     }
 
+    void BgfxRenderer::drawMesh(const MeshDraw& draw)
+    {
+        if (draw.vertices.empty() || draw.indices.empty()) {
+            return;
+        }
+
+        // Before the arenas: beginFrame() is the only thing that clears them.
+        if (!inFrameOrWarn()) {
+            return;
+        }
+
+        const bool knownTexture = draw.texture == TextureHandle::Invalid || find(draw.texture) != nullptr;
+        if (!isValidMesh(draw.vertices, draw.indices) || !knownTexture) {
+            if (!m_warnedInvalidMesh) {
+                std::cerr << "[BgfxRenderer] WARN: drawMesh with malformed geometry or an unknown texture; ignoring\n";
+                m_warnedInvalidMesh = true;
+            }
+            return;
+        }
+
+        Command command;
+        command.kind = Command::Kind::Mesh;
+        command.firstVertex = static_cast<uint32_t>(m_meshVertices.size());
+        command.vertexCount = static_cast<uint32_t>(draw.vertices.size());
+        command.firstIndex = static_cast<uint32_t>(m_meshIndices.size());
+        command.indexCount = static_cast<uint32_t>(draw.indices.size());
+        command.texture = draw.texture;
+        command.space = draw.space;
+
+        m_meshVertices.insert(m_meshVertices.end(), draw.vertices.begin(), draw.vertices.end());
+        m_meshIndices.insert(m_meshIndices.end(), draw.indices.begin(), draw.indices.end());
+
+        submit(command, draw.layer);
+    }
+
     const char* BgfxRenderer::backendName() const
     {
         return m_name.c_str();
     }
 
+    TextureHandle BgfxRenderer::textureOf(const Command& command)
+    {
+        switch (command.kind) {
+            case Command::Kind::Rect: return TextureHandle::Invalid;
+            case Command::Kind::Sprite: return command.sprite.texture;
+            case Command::Kind::Mesh: return command.texture;
+        }
+        return TextureHandle::Invalid;
+    }
+
+    Space BgfxRenderer::spaceOf(const Command& command)
+    {
+        switch (command.kind) {
+            case Command::Kind::Rect: return command.rect.space;
+            case Command::Kind::Sprite: return command.sprite.space;
+            case Command::Kind::Mesh: return command.space;
+        }
+        return Space::World;
+    }
+
+    uint32_t BgfxRenderer::vertexCountOf(const Command& command)
+    {
+        return command.kind == Command::Kind::Mesh ? command.vertexCount : 4u;
+    }
+
+    uint32_t BgfxRenderer::indexCountOf(const Command& command)
+    {
+        return command.kind == Command::Kind::Mesh ? command.indexCount : 6u;
+    }
+
+    bool BgfxRenderer::inFrameOrWarn()
+    {
+        if (m_inFrame) {
+            return true;
+        }
+
+        if (!m_warnedOutsideFrame) {
+            std::cerr << "[BgfxRenderer] WARN: draw outside beginFrame()/endFrame(); ignoring\n";
+            m_warnedOutsideFrame = true;
+        }
+        return false;
+    }
+
     void BgfxRenderer::submit(const Command& command, const Layer layer)
     {
-        if (!m_inFrame) {
-            if (!m_warnedOutsideFrame) {
-                std::cerr << "[BgfxRenderer] WARN: draw outside beginFrame()/endFrame(); ignoring\n";
-                m_warnedOutsideFrame = true;
-            }
+        if (!inFrameOrWarn()) {
             return;
         }
 
-        Layer clamped = layer;
-        if (clamped < MinLayer || clamped > MaxLayer) {
-            if (!m_warnedLayerRange) {
-                std::cerr << "[BgfxRenderer] WARN: layer " << layer << " out of range, clamping\n";
-                m_warnedLayerRange = true;
-            }
-            clamped = clamped < MinLayer ? MinLayer : MaxLayer;
-        }
-
-        m_layers[static_cast<size_t>(clamped)].push_back(command);
+        m_layers[static_cast<size_t>(layerSlot(layer))].push_back(command);
     }
 
     void BgfxRenderer::submitLayer(const std::vector<Command>& commands, const Mat4& camera, const Mat4& identity)
     {
-        const auto textureOf = [](const Command& c) {
-            return c.kind == Command::Kind::Rect ? TextureHandle::Invalid : c.sprite.texture;
-        };
-        const auto spaceOf = [](const Command& c) {
-            return c.kind == Command::Kind::Rect ? c.rect.space : c.sprite.space;
-        };
-
         size_t start = 0;
         while (start < commands.size()) {
+            const TextureHandle texture = textureOf(commands[start]);
+            const Space space = spaceOf(commands[start]);
+            size_t batchVertices = vertexCountOf(commands[start]);
+
+            // 16-bit indices address at most MaxMeshVertices per submit.
             size_t end = start + 1;
-            while (end < commands.size() && end - start < MaxQuadsPerBatch
-                && textureOf(commands[end]) == textureOf(commands[start])
-                && spaceOf(commands[end]) == spaceOf(commands[start])) {
+            while (end < commands.size()
+                && textureOf(commands[end]) == texture
+                && spaceOf(commands[end]) == space
+                && batchVertices + vertexCountOf(commands[end]) <= MaxMeshVertices) {
+                batchVertices += vertexCountOf(commands[end]);
                 ++end;
             }
 
@@ -352,44 +418,68 @@ namespace gfx {
             return;
         }
 
-        const bool isRect = first->kind == Command::Kind::Rect;
-        const Texture* texture = isRect ? nullptr : find(first->sprite.texture);
-        if (!isRect && texture == nullptr) {
-            return;
+        const TextureHandle batchTexture = textureOf(*first);
+        const Texture* texture = nullptr;
+        if (batchTexture != TextureHandle::Invalid) {
+            texture = find(batchTexture);
+            if (texture == nullptr) {
+                return;
+            }
         }
 
-        const uint32_t vertexCount = count * 4;
-        const uint32_t indexCount = count * 6;
+        uint32_t vertexCount = 0;
+        uint32_t indexCount = 0;
+        for (uint32_t i = 0; i < count; ++i) {
+            vertexCount += vertexCountOf(first[i]);
+            indexCount += indexCountOf(first[i]);
+        }
+
         bgfx::TransientVertexBuffer vertices;
         bgfx::TransientIndexBuffer indices;
         if (!bgfx::allocTransientBuffers(&vertices, m_layout, vertexCount, &indices, indexCount)) {
             if (!m_warnedTransient) {
-                std::cerr << "[BgfxRenderer] WARN: transient buffers exhausted; dropping quads this frame\n";
+                std::cerr << "[BgfxRenderer] WARN: transient buffers exhausted; dropping the rest of this frame\n";
                 m_warnedTransient = true;
             }
             m_dropRestOfFrame = true;
             return;
         }
 
-        static_assert(sizeof(Quad) == 4 * sizeof(QuadVertex), "a Quad must be four packed vertices");
+        static_assert(sizeof(Quad) == 4 * sizeof(Vertex), "a Quad must be four packed vertices");
 
+        auto* const indexOut = reinterpret_cast<uint16_t*>(indices.data);
+
+        // Offsets run across the batch: an untextured mesh and a rect can share it.
+        uint32_t vertexOffset = 0;
+        uint32_t indexOffset = 0;
         for (uint32_t i = 0; i < count; ++i) {
             const Command& command = first[i];
-            const Quad quad = isRect ? buildQuad(command.rect) : buildQuad(command.sprite, texture->size);
-            std::memcpy(vertices.data + static_cast<size_t>(i) * sizeof(Quad), quad.data(), sizeof(Quad));
+            uint8_t* const vertexOut = vertices.data + static_cast<size_t>(vertexOffset) * sizeof(Vertex);
 
-            std::array<uint16_t, 6> quadIndices = QuadIndices;
-            for (uint16_t& index : quadIndices) {
-                index = static_cast<uint16_t>(index + i * 4);
+            if (command.kind == Command::Kind::Mesh) {
+                std::memcpy(vertexOut, m_meshVertices.data() + command.firstVertex,
+                    static_cast<size_t>(command.vertexCount) * sizeof(Vertex));
+                for (uint32_t j = 0; j < command.indexCount; ++j) {
+                    indexOut[indexOffset + j] = static_cast<uint16_t>(m_meshIndices[command.firstIndex + j] + vertexOffset);
+                }
+            } else {
+                const Quad quad = command.kind == Command::Kind::Rect
+                    ? buildQuad(command.rect)
+                    : buildQuad(command.sprite, texture->size);
+                std::memcpy(vertexOut, quad.data(), sizeof(Quad));
+                for (uint32_t j = 0; j < QuadIndices.size(); ++j) {
+                    indexOut[indexOffset + j] = static_cast<uint16_t>(QuadIndices[j] + vertexOffset);
+                }
             }
-            std::memcpy(indices.data + static_cast<size_t>(i) * sizeof(quadIndices), quadIndices.data(), sizeof(quadIndices));
+
+            vertexOffset += vertexCountOf(command);
+            indexOffset += indexCountOf(command);
         }
 
-        const Space space = isRect ? first->rect.space : first->sprite.space;
-        bgfx::setTransform(space == Space::World ? camera.data() : identity.data());
+        bgfx::setTransform(spaceOf(*first) == Space::World ? camera.data() : identity.data());
         bgfx::setVertexBuffer(0, &vertices);
         bgfx::setIndexBuffer(&indices);
-        bgfx::setTexture(0, m_sampler, isRect ? m_white : texture->handle);
+        bgfx::setTexture(0, m_sampler, texture != nullptr ? texture->handle : m_white);
         bgfx::setState(DrawState);
         bgfx::submit(SceneView, m_program->handle());
     }

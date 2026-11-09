@@ -14,6 +14,8 @@
 #include <SDL3/SDL.h>
 
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,7 +25,9 @@
 #include "Tools/ImageLoader/ImageLoader.hpp"
 #include "Playground/ModeToggle/ModeToggle.hpp"
 #include "Playground/Player/Player.hpp"
+#include "Playground/Scenery/Scenery.hpp"
 #include "Playground/Showcase/Showcase.hpp"
+#include "Renderer/Colors/Colors.hpp"
 #include "Renderer/RendererFactory/RendererFactory.hpp"
 
 namespace {
@@ -39,26 +43,53 @@ namespace {
     constexpr float ZoomStep = 1.12f;
     constexpr float MinZoom = 0.2f;
     constexpr float MaxZoom = 8.0f;
+    constexpr float FontPixelHeight = 24.0f;
+    constexpr float HudHeight = 36.0f;
+    constexpr float HudTextX = 40.0f;           // right of the mode button
+    constexpr float EdgeThickness = 3.0f;
+    constexpr float EdgeLightness = 0.35f;
 
-    constexpr gfx::Color Background{ 24, 26, 32, 255 };
-    constexpr gfx::Color Ground{ 60, 72, 58, 255 };
-    constexpr gfx::Color Platform{ 92, 104, 128, 255 };
-    constexpr gfx::Color Hud{ 255, 255, 255, 40 };
+    constexpr gfx::Color Background = gfx::fromHex(0x181A20FF);
+    constexpr gfx::Color Ground = gfx::fromHex(0x3C483AFF);
+    constexpr gfx::Color Platform = gfx::fromHex(0x5C6880FF);
+    constexpr gfx::Color Hud = gfx::withAlpha(gfx::White, 40);
 
     // Wide enough that panning has somewhere to go.
     std::vector<gfx::RectDraw> makeScene()
     {
         std::vector<gfx::RectDraw> scene;
 
-        scene.push_back({ gfx::Rect{ -2000.0f, GroundTop, 6000.0f, 120.0f }, Ground, 0, gfx::Space::World });
+        scene.push_back({ gfx::Rect{ -2000.0f, GroundTop, 6000.0f, 120.0f }, Ground, gfx::Layer::Game, gfx::Space::World });
 
         for (int i = 0; i < 8; ++i) {
             const auto x = static_cast<float>(-800 + i * 320);
             const auto y = static_cast<float>(420 - (i % 4) * 90);
-            scene.push_back({ gfx::Rect{ x, y, 180.0f, 28.0f }, Platform, 1, gfx::Space::World });
+            scene.push_back({ gfx::Rect{ x, y, 180.0f, 28.0f }, Platform, gfx::Layer::Game, gfx::Space::World });
         }
 
         return scene;
+    }
+
+    void drawTopEdge(gfx::IRenderer& renderer, const gfx::RectDraw& object)
+    {
+        const float y = object.dest.y + EdgeThickness * 0.5f;
+
+        renderer.drawLine({ gfx::Vec2{ object.dest.x, y }, gfx::Vec2{ object.dest.x + object.dest.w, y }, EdgeThickness,
+                            gfx::lerp(object.color, gfx::White, EdgeLightness), object.layer, object.space });
+    }
+
+    void drawHudText(gfx::IRenderer& renderer, const gfx::Font& font, const playground::Mode mode)
+    {
+        const std::string text = std::string(mode == playground::Mode::Play ? "Play mode" : "Edit mode")
+            + "  |  " + renderer.backendName();
+
+        gfx::TextDraw draw;
+        draw.font = &font;
+        draw.text = text;
+        draw.position = gfx::Vec2{ HudTextX, (HudHeight - font.lineHeight()) * 0.5f };
+        draw.layer = gfx::Layer::Foreground;
+        draw.space = gfx::Space::Screen;
+        renderer.drawText(draw);
     }
 
     // CLion runs from the build directory: resolve next to the binary, where CMake copies assets/.
@@ -67,6 +98,16 @@ namespace {
         const char* base = SDL_GetBasePath();
 
         return std::string(base != nullptr ? base : "") + "assets/" + relative;
+    }
+
+    std::vector<uint8_t> readFile(const std::string& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        if (!file) {
+            return {};
+        }
+
+        return std::vector<uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     }
 
     // The play button runs bgfx; a second run configuration passes --backend=sdl.
@@ -162,6 +203,13 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    // Created after the last early return above; it must die before the renderer.
+    const std::vector<uint8_t> fontFile = readFile(assetPath("DejaVuSans.ttf"));
+    std::unique_ptr<gfx::Font> font = gfx::Font::create(*renderer, fontFile, FontPixelHeight);
+    if (font == nullptr) {
+        std::printf("Could not create the font: the HUD will have no text\n");
+    }
+
     playground::Player player(bullTexture, gfx::Vec2{ 120.0f, GroundTop });
     playground::ModeToggle modeToggle(playground::Mode::Edit);
 
@@ -170,6 +218,7 @@ int main(int argc, char** argv)
     showcase.emplace(*renderer, *sheet, ShowcaseCenter);
 
     const std::vector<gfx::RectDraw> scene = makeScene();
+    const playground::Scenery scenery(GroundTop);
 
     gfx::Vec2 viewport{ static_cast<float>(WindowWidth), static_cast<float>(WindowHeight) };
     gfx::Camera2D camera;
@@ -239,21 +288,31 @@ int main(int argc, char** argv)
         renderer->beginFrame(Background);
         renderer->setCamera(camera);
 
+        scenery.drawBackground(*renderer, viewport);
+
         for (const gfx::RectDraw& object : scene) {
             renderer->drawRect(object);
+            drawTopEdge(*renderer, object);
         }
 
         renderer->drawSprite(player.sprite());
-        showcase->draw(viewport);
+
+        // Before the HUD: both are Foreground, so submission order keeps the bushes under it.
+        scenery.drawForeground(*renderer);
 
         // Screen space ignores the camera: this bar stays put while the world scrolls under it.
-        renderer->drawRect({ gfx::Rect{ 0.0f, 0.0f, viewport.x, 36.0f }, Hud, 10, gfx::Space::Screen });
+        renderer->drawRect({ gfx::Rect{ 0.0f, 0.0f, viewport.x, HudHeight }, Hud, gfx::Layer::Foreground, gfx::Space::Screen });
+        showcase->draw(viewport);
         modeToggle.draw(*renderer);
+        if (font != nullptr) {
+            drawHudText(*renderer, *font, modeToggle.mode());
+        }
 
         renderer->endFrame();
     }
 
     showcase.reset();
+    font.reset();
     renderer->destroyTexture(bullTexture);
 
     // The renderer holds an SDL_Renderer tied to this window: release it before the window dies.

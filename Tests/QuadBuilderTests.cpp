@@ -84,7 +84,7 @@ TEST(QuadBuilder, TintIsCopiedToEveryCorner)
     gfx::SpriteDraw draw = sprite({ 0.0f, 0.0f, 8.0f, 8.0f }, {});
     draw.tint = gfx::Color{ 10, 20, 30, 40 };
 
-    for (const gfx::QuadVertex& v : gfx::buildQuad(draw, Sheet)) {
+    for (const gfx::Vertex& v : gfx::buildQuad(draw, Sheet)) {
         EXPECT_EQ(v.r, 10); EXPECT_EQ(v.g, 20); EXPECT_EQ(v.b, 30); EXPECT_EQ(v.a, 40);
     }
 }
@@ -115,13 +115,13 @@ TEST(QuadBuilder, FlipAndRotationCombine)
 
 TEST(QuadBuilder, RectUsesFullUvAndItsColor)
 {
-    const gfx::RectDraw rect{ gfx::Rect{ 1.0f, 2.0f, 3.0f, 4.0f }, gfx::Color{ 9, 8, 7, 6 }, 0, gfx::Space::Screen };
+    const gfx::RectDraw rect{ gfx::Rect{ 1.0f, 2.0f, 3.0f, 4.0f }, gfx::Color{ 9, 8, 7, 6 }, gfx::Layer::Game, gfx::Space::Screen };
     const gfx::Quad q = gfx::buildQuad(rect);
 
     EXPECT_FLOAT_EQ(q[TL].x, 1.0f); EXPECT_FLOAT_EQ(q[BR].y, 6.0f);
     EXPECT_FLOAT_EQ(q[TL].u, 0.0f); EXPECT_FLOAT_EQ(q[BR].u, 1.0f);
     EXPECT_FLOAT_EQ(q[TL].v, 0.0f); EXPECT_FLOAT_EQ(q[BR].v, 1.0f);
-    for (const gfx::QuadVertex& v : q) {
+    for (const gfx::Vertex& v : q) {
         EXPECT_EQ(v.r, 9); EXPECT_EQ(v.a, 6);
     }
 }
@@ -130,7 +130,7 @@ TEST(QuadBuilder, ZeroTextureSizeFallsBackToWholeTexture)
 {
     const gfx::Quad q = gfx::buildQuad(sprite({ 0.0f, 0.0f, 8.0f, 8.0f }, { 0.0f, 0.0f, 10.0f, 10.0f }), gfx::Vec2{ 0.0f, 0.0f });
 
-    for (const gfx::QuadVertex& v : q) {
+    for (const gfx::Vertex& v : q) {
         EXPECT_TRUE(std::isfinite(v.u) && std::isfinite(v.v));
     }
     EXPECT_FLOAT_EQ(q[TL].u, 0.0f);

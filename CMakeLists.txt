@@ -89,8 +89,16 @@ add_library(renderer_core STATIC
         Renderer/CameraMatrix/CameraMatrix.hpp
         Renderer/QuadBuilder/QuadBuilder.cpp
         Renderer/QuadBuilder/QuadBuilder.hpp
+        Renderer/Colors/Colors.cpp
+        Renderer/Colors/Colors.hpp
+        Renderer/ShapeBuilder/ShapeBuilder.cpp
+        Renderer/ShapeBuilder/ShapeBuilder.hpp
+        Renderer/Font/Font.cpp
+        Renderer/Font/Font.hpp
 )
 target_include_directories(renderer_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# SYSTEM keeps stb's own warnings out of the clean build.
+target_include_directories(renderer_core SYSTEM PRIVATE ${bgfx_SOURCE_DIR}/bgfx/3rdparty/stb)
 renderer_wrapper_warnings(renderer_core)
 
 # --- Executable --------------------------------------------------------------
@@ -114,6 +122,8 @@ add_executable(renderer_wrapper
         Playground/ModeToggle/ModeToggle.hpp
         Playground/Showcase/Showcase.cpp
         Playground/Showcase/Showcase.hpp
+        Playground/Scenery/Scenery.cpp
+        Playground/Scenery/Scenery.hpp
         # As sources, these run shaderc before compiling and again on every .sc edit.
         ${VERTEX_SHADER_HEADERS}
         ${FRAGMENT_SHADER_HEADERS}
@@ -161,11 +171,15 @@ add_executable(renderer_tests
         Tests/NullRendererTests.cpp
         Tests/CameraMatrixTests.cpp
         Tests/QuadBuilderTests.cpp
+        Tests/ColorsTests.cpp
+        Tests/ShapeBuilderTests.cpp
+        Tests/FontTests.cpp
 )
 target_link_libraries(renderer_tests PRIVATE
         renderer_core
         GTest::gtest_main
 )
+target_compile_definitions(renderer_tests PRIVATE RENDERER_TEST_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/DejaVuSans.ttf")
 renderer_wrapper_warnings(renderer_tests)
 
 include(GoogleTest)

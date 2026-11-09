@@ -25,7 +25,7 @@ namespace playground {
         constexpr uint32_t IdleFrame = 2;       // legs together: reads as standing
         constexpr float DrawSize = 128.0f;
         constexpr float HoofLine = 460.0f / FrameSize;  // hooves sit above the frame's bottom edge
-        constexpr gfx::Layer PlayerLayer = 2;
+        constexpr gfx::Layer PlayerLayer = gfx::Layer::Game;
     }
 
     Player::Player(const gfx::TextureHandle sheet, const gfx::Vec2 feet)

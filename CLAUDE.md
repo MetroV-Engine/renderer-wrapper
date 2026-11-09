@@ -30,13 +30,11 @@ part of the change being made.
 
 `.claude/` is local tooling configuration, not project code: it is gitignored and stays that way.
 
-### The human drives CLion's UI
-Claude does **not**:
-- create C++ files or classes (CLion's *New > C++ Class* does it, with the project's file header template),
-- build or compile the project (the human clicks build/run and pastes the output).
+### The human builds in CLion
+Claude does **not** build or compile the project (the human clicks build/run and pastes the output).
 
-Claude **does**: tell the human exactly which files/classes to create (name + directory),
-then write their contents, and edit `CMakeLists.txt` and shaders.
+Claude **does** create C++ files and write their contents, with the project's file-header banner,
+and edit `CMakeLists.txt` and shaders.
 
 ## Code standards
 
