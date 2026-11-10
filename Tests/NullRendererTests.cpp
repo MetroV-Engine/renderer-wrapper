@@ -17,6 +17,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace {
@@ -209,62 +210,121 @@ TEST(NullRenderer, ClearRecordedEmptiesTheLog)
     EXPECT_TRUE(renderer.recorded().empty());
 }
 
-TEST(NullRenderer, DrawLineRecordsAMesh)
+TEST(NullRenderer, EveryShapeIsRecordedWithItsKind)
 {
     gfx::NullRenderer renderer(800, 600);
+    const std::array<gfx::Vec2, 3> points{ gfx::Vec2{ 0.0f, 0.0f }, gfx::Vec2{ 4.0f, 0.0f }, gfx::Vec2{ 0.0f, 4.0f } };
+    const std::vector<gfx::Vertex> vertices = threeVertices();
+    const std::vector<uint16_t> indices{ 0, 1, 2 };
 
     gfx::LineDraw line;
-    line.from = gfx::Vec2{ 0.0f, 0.0f };
-    line.to = gfx::Vec2{ 10.0f, 0.0f };
-    line.layer = gfx::Layer::Foreground;
-    line.space = gfx::Space::Screen;
-
-    renderer.beginFrame(gfx::Black);
-    renderer.drawLine(line);
-    renderer.endFrame();
-
-    ASSERT_EQ(renderer.recorded().size(), 1u);
-
-    const gfx::NullRenderer::Recorded& entry = renderer.recorded()[0];
-    EXPECT_EQ(entry.kind, Kind::Mesh);
-    EXPECT_EQ(entry.meshVertices.size(), 4u);
-    EXPECT_EQ(entry.meshIndices.size(), 6u);
-    EXPECT_EQ(entry.meshLayer, gfx::Layer::Foreground);
-    EXPECT_EQ(entry.meshSpace, gfx::Space::Screen);
-}
-
-TEST(NullRenderer, DegenerateShapesRecordNothing)
-{
-    gfx::NullRenderer renderer(800, 600);
-
-    gfx::LineDraw line;
-    line.from = gfx::Vec2{ 5.0f, 5.0f };
-    line.to = gfx::Vec2{ 5.0f, 5.0f };
-
+    line.thickness = 2.5f;
+    gfx::TriangleDraw triangle;
+    triangle.points = points;
+    gfx::QuadDraw quad;
+    quad.corners[2] = gfx::Vec2{ 7.0f, 8.0f };
     gfx::CircleDraw circle;
-    circle.radius = 0.0f;
+    circle.radius = 9.0f;
+    circle.segments = 12;
+    gfx::PolygonDraw polygon;
+    polygon.points = points;
+    gfx::TextDraw text;
+    text.text = "hi";
+    text.position = gfx::Vec2{ 3.0f, 6.0f };
 
     renderer.beginFrame(gfx::Black);
     renderer.drawLine(line);
+    renderer.drawTriangle(triangle);
+    renderer.drawQuad(quad);
     renderer.drawCircle(circle);
+    renderer.drawPolygon(polygon);
+    renderer.drawMesh(meshOf(vertices, indices));
+    renderer.drawText(text);
     renderer.endFrame();
 
-    EXPECT_TRUE(renderer.recorded().empty());
+    const std::vector<gfx::NullRenderer::Recorded>& recorded = renderer.recorded();
+    ASSERT_EQ(recorded.size(), 7u);
+    EXPECT_EQ(recorded[0].kind, Kind::Line);
+    EXPECT_EQ(recorded[1].kind, Kind::Triangle);
+    EXPECT_EQ(recorded[2].kind, Kind::Quad);
+    EXPECT_EQ(recorded[3].kind, Kind::Circle);
+    EXPECT_EQ(recorded[4].kind, Kind::Polygon);
+    EXPECT_EQ(recorded[5].kind, Kind::Mesh);
+    EXPECT_EQ(recorded[6].kind, Kind::Text);
+
+    EXPECT_FLOAT_EQ(recorded[0].line.thickness, 2.5f);
+    EXPECT_FLOAT_EQ(recorded[1].triangle.points[1].x, 4.0f);
+    EXPECT_FLOAT_EQ(recorded[2].quad.corners[2].y, 8.0f);
+    EXPECT_FLOAT_EQ(recorded[3].circle.radius, 9.0f);
+    EXPECT_EQ(recorded[3].circle.segments, 12);
+    EXPECT_EQ(recorded[4].polygonPoints.size(), 3u);
+    EXPECT_EQ(recorded[5].meshVertices.size(), 3u);
+    EXPECT_EQ(recorded[6].textContent, "hi");
+    EXPECT_FLOAT_EQ(recorded[6].text.position.y, 6.0f);
 }
 
-TEST(NullRenderer, FailedPolygonRecordsNothing)
+TEST(NullRenderer, PolygonKeepsItsOwnPoints)
 {
     gfx::NullRenderer renderer(800, 600);
+    std::vector<gfx::Vec2> points{ gfx::Vec2{ 1.0f, 2.0f }, gfx::Vec2{ 5.0f, 2.0f }, gfx::Vec2{ 5.0f, 6.0f } };
 
-    const std::array<gfx::Vec2, 4> bowtie{
-        gfx::Vec2{ 0.0f, 0.0f }, gfx::Vec2{ 10.0f, 10.0f }, gfx::Vec2{ 10.0f, 0.0f }, gfx::Vec2{ 0.0f, 10.0f }
-    };
     gfx::PolygonDraw polygon;
-    polygon.points = bowtie;
+    polygon.points = points;
 
     renderer.beginFrame(gfx::Black);
     renderer.drawPolygon(polygon);
     renderer.endFrame();
+
+    points[0].x = 99.0f;
+    points.clear();
+
+    ASSERT_EQ(renderer.recorded().size(), 1u);
+    const std::vector<gfx::Vec2>& kept = renderer.recorded()[0].polygonPoints;
+    ASSERT_EQ(kept.size(), 3u);
+    EXPECT_FLOAT_EQ(kept[0].x, 1.0f);
+    EXPECT_FLOAT_EQ(kept[2].y, 6.0f);
+}
+
+TEST(NullRenderer, TextKeepsItsOwnString)
+{
+    gfx::NullRenderer renderer(800, 600);
+    const gfx::Font* const font = reinterpret_cast<const gfx::Font*>(std::uintptr_t{ 0x1000 });
+
+    renderer.beginFrame(gfx::Black);
+    {
+        const std::string scoped = "scoped text";
+        gfx::TextDraw draw;
+        draw.font = font;
+        draw.text = scoped;
+        renderer.drawText(draw);
+    }
+    renderer.endFrame();
+
+    ASSERT_EQ(renderer.recorded().size(), 1u);
+    EXPECT_EQ(renderer.recorded()[0].textContent, "scoped text");
+    EXPECT_EQ(renderer.recorded()[0].text.font, font);
+}
+
+TEST(NullRenderer, ShapesOutsideFrameAreIgnored)
+{
+    gfx::NullRenderer renderer(800, 600);
+    const std::array<gfx::Vec2, 3> points{ gfx::Vec2{ 0.0f, 0.0f }, gfx::Vec2{ 4.0f, 0.0f }, gfx::Vec2{ 0.0f, 4.0f } };
+
+    gfx::PolygonDraw polygon;
+    polygon.points = points;
+    gfx::TextDraw text;
+    text.text = "hi";
+
+    renderer.drawLine(gfx::LineDraw{});
+    renderer.drawTriangle(gfx::TriangleDraw{});
+    renderer.drawQuad(gfx::QuadDraw{});
+    renderer.drawCircle(gfx::CircleDraw{});
+    renderer.drawPolygon(polygon);
+    renderer.drawText(text);
+    renderer.beginFrame(gfx::Black);
+    renderer.endFrame();
+    renderer.drawLine(gfx::LineDraw{});
+    renderer.drawText(text);
 
     EXPECT_TRUE(renderer.recorded().empty());
 }

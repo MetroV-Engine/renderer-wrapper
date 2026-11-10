@@ -15,6 +15,7 @@
 #define RENDERER_WRAPPER_SDLRENDERER_HPP
 
 #include "Renderer/IRenderer.hpp"
+#include "Renderer/ShapeBuilder/ShapeBuilder.hpp"
 
 #include <array>
 #include <memory>
@@ -50,6 +51,12 @@ namespace gfx {
             void drawRect(const RectDraw& draw) override;
             void drawSprite(const SpriteDraw& draw) override;
             void drawMesh(const MeshDraw& draw) override;
+            void drawLine(const LineDraw& draw) override;
+            void drawTriangle(const TriangleDraw& draw) override;
+            void drawQuad(const QuadDraw& draw) override;
+            void drawCircle(const CircleDraw& draw) override;
+            void drawPolygon(const PolygonDraw& draw) override;
+            void drawText(const TextDraw& draw) override;
 
             const char* backendName() const override;
 
@@ -81,6 +88,7 @@ namespace gfx {
             void flushMesh(const Command& command);
             SDL_Texture* find(TextureHandle texture) const;
             void releasePending();
+            void submitScratch(TextureHandle texture, Layer layer, Space space);
 
             SDL_Renderer* m_renderer = nullptr;
             std::string m_name;
@@ -103,6 +111,10 @@ namespace gfx {
             bool m_warnedOutsideFrame = false;
             bool m_warnedInvalidTexture = false;
             bool m_warnedInvalidMesh = false;
+            bool m_warnedPolygon = false;
+            bool m_warnedNullFont = false;
+
+            TriangleMesh m_scratch;
     };
 
 }

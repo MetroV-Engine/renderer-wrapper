@@ -28,6 +28,7 @@
 #include "Playground/Scenery/Scenery.hpp"
 #include "Playground/Showcase/Showcase.hpp"
 #include "Renderer/Colors/Colors.hpp"
+#include "Renderer/Font/Font.hpp"
 #include "Renderer/RendererFactory/RendererFactory.hpp"
 
 namespace {

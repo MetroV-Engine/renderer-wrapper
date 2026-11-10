@@ -241,7 +241,7 @@ TEST_F(FontTests, LongTextStopsAtTheVertexLimit)
     }
 }
 
-TEST_F(FontTests, DrawTextRecordsAMeshWithTheAtlas)
+TEST_F(FontTests, DrawTextIsRecordedWithItsFont)
 {
     renderer.beginFrame(gfx::Color{});
 
@@ -254,24 +254,20 @@ TEST_F(FontTests, DrawTextRecordsAMeshWithTheAtlas)
 
     ASSERT_EQ(renderer.recorded().size(), 1u);
     const gfx::NullRenderer::Recorded& entry = renderer.recorded()[0];
-    EXPECT_EQ(entry.kind, gfx::NullRenderer::Recorded::Kind::Mesh);
-    EXPECT_EQ(entry.meshTexture, font->texture());
-    EXPECT_EQ(entry.meshLayer, gfx::Layer::Foreground);
-    EXPECT_EQ(entry.meshSpace, gfx::Space::Screen);
-    EXPECT_EQ(entry.meshVertices.size(), 8u);
+    EXPECT_EQ(entry.kind, gfx::NullRenderer::Recorded::Kind::Text);
+    EXPECT_EQ(entry.text.font, font.get());
+    EXPECT_EQ(entry.textContent, "ab");
+    EXPECT_EQ(entry.text.layer, gfx::Layer::Foreground);
+    EXPECT_EQ(entry.text.space, gfx::Space::Screen);
 }
 
-TEST_F(FontTests, NullFontAndEmptyTextRecordNothing)
+TEST_F(FontTests, EmptyTextAppendsNothing)
 {
-    renderer.beginFrame(gfx::Color{});
+    gfx::TriangleMesh mesh;
+    gfx::TextDraw draw;
+    draw.font = font.get();
+    draw.text = "";
+    font->appendText(mesh, draw);
 
-    gfx::TextDraw nullFont;
-    nullFont.text = "ab";
-    renderer.drawText(nullFont);
-
-    gfx::TextDraw emptyText;
-    emptyText.font = font.get();
-    renderer.drawText(emptyText);
-
-    EXPECT_TRUE(renderer.recorded().empty());
+    EXPECT_EQ(mesh.vertices.size(), 0u);
 }

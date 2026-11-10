@@ -16,6 +16,7 @@
 
 #include "Renderer/IRenderer.hpp"
 
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -24,11 +25,19 @@ namespace gfx {
     class NullRenderer final : public IRenderer {
         public:
             struct Recorded {
-                enum class Kind : uint8_t { Rect, Sprite, Mesh };
+                enum class Kind : uint8_t { Rect, Sprite, Line, Triangle, Quad, Circle, Polygon, Mesh, Text };
 
                 Kind kind = Kind::Rect;
                 RectDraw rect;
                 SpriteDraw sprite;
+                LineDraw line;
+                TriangleDraw triangle;
+                QuadDraw quad;
+                CircleDraw circle;
+                PolygonDraw polygon;        // points left empty; see polygonPoints
+                TextDraw text;              // text left empty; see textContent
+                std::vector<Vec2> polygonPoints;
+                std::string textContent;
                 std::vector<Vertex> meshVertices;
                 std::vector<uint16_t> meshIndices;
                 TextureHandle meshTexture = TextureHandle::Invalid;
@@ -51,7 +60,13 @@ namespace gfx {
 
             void drawRect(const RectDraw& draw) override;
             void drawSprite(const SpriteDraw& draw) override;
+            void drawLine(const LineDraw& draw) override;
+            void drawTriangle(const TriangleDraw& draw) override;
+            void drawQuad(const QuadDraw& draw) override;
+            void drawCircle(const CircleDraw& draw) override;
+            void drawPolygon(const PolygonDraw& draw) override;
             void drawMesh(const MeshDraw& draw) override;
+            void drawText(const TextDraw& draw) override;
 
             const char* backendName() const override;
 

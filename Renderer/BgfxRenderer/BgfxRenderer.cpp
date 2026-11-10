@@ -13,6 +13,7 @@
 
 #include "Renderer/BgfxRenderer/BgfxRenderer.hpp"
 
+#include "Renderer/Font/Font.hpp"
 #include "Renderer/QuadBuilder/QuadBuilder.hpp"
 #include "Renderer/SdlWindowBridge/SdlWindowBridge.hpp"
 #include "Renderer/ShapeBuilder/ShapeBuilder.hpp"
@@ -330,6 +331,76 @@ namespace gfx {
         m_meshIndices.insert(m_meshIndices.end(), draw.indices.begin(), draw.indices.end());
 
         submit(command, draw.layer);
+    }
+
+    void BgfxRenderer::drawLine(const LineDraw& draw)
+    {
+        m_scratch.clear();
+        appendLine(m_scratch, draw);
+        submitScratch(TextureHandle::Invalid, draw.layer, draw.space);
+    }
+
+    void BgfxRenderer::drawTriangle(const TriangleDraw& draw)
+    {
+        m_scratch.clear();
+        appendTriangle(m_scratch, draw);
+        submitScratch(TextureHandle::Invalid, draw.layer, draw.space);
+    }
+
+    void BgfxRenderer::drawQuad(const QuadDraw& draw)
+    {
+        m_scratch.clear();
+        appendQuad(m_scratch, draw);
+        submitScratch(TextureHandle::Invalid, draw.layer, draw.space);
+    }
+
+    void BgfxRenderer::drawCircle(const CircleDraw& draw)
+    {
+        m_scratch.clear();
+        appendCircle(m_scratch, draw);
+        submitScratch(TextureHandle::Invalid, draw.layer, draw.space);
+    }
+
+    void BgfxRenderer::drawPolygon(const PolygonDraw& draw)
+    {
+        if (draw.points.size() < 3) {
+            return;
+        }
+
+        m_scratch.clear();
+        if (!appendPolygon(m_scratch, draw)) {
+            if (!m_warnedPolygon) {
+                std::cerr << "[BgfxRenderer] WARN: drawPolygon could not triangulate its points; ignoring\n";
+                m_warnedPolygon = true;
+            }
+            return;
+        }
+
+        submitScratch(TextureHandle::Invalid, draw.layer, draw.space);
+    }
+
+    void BgfxRenderer::drawText(const TextDraw& draw)
+    {
+        if (draw.font == nullptr) {
+            if (!m_warnedNullFont) {
+                std::cerr << "[BgfxRenderer] WARN: drawText called with a null font; ignoring\n";
+                m_warnedNullFont = true;
+            }
+            return;
+        }
+
+        m_scratch.clear();
+        draw.font->appendText(m_scratch, draw);
+        submitScratch(draw.font->texture(), draw.layer, draw.space);
+    }
+
+    void BgfxRenderer::submitScratch(const TextureHandle texture, const Layer layer, const Space space)
+    {
+        if (m_scratch.vertices.empty()) {
+            return;
+        }
+
+        drawMesh(MeshDraw{ m_scratch.vertices, m_scratch.indices, texture, layer, space });
     }
 
     const char* BgfxRenderer::backendName() const

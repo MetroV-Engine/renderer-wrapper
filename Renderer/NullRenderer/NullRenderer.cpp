@@ -101,6 +101,68 @@ namespace gfx {
         m_recorded.push_back(entry);
     }
 
+    void NullRenderer::drawLine(const LineDraw& draw)
+    {
+        if (!m_inFrame) {
+            return;
+        }
+
+        Recorded entry;
+        entry.kind = Recorded::Kind::Line;
+        entry.line = draw;
+        m_recorded.push_back(entry);
+    }
+
+    void NullRenderer::drawTriangle(const TriangleDraw& draw)
+    {
+        if (!m_inFrame) {
+            return;
+        }
+
+        Recorded entry;
+        entry.kind = Recorded::Kind::Triangle;
+        entry.triangle = draw;
+        m_recorded.push_back(entry);
+    }
+
+    void NullRenderer::drawQuad(const QuadDraw& draw)
+    {
+        if (!m_inFrame) {
+            return;
+        }
+
+        Recorded entry;
+        entry.kind = Recorded::Kind::Quad;
+        entry.quad = draw;
+        m_recorded.push_back(entry);
+    }
+
+    void NullRenderer::drawCircle(const CircleDraw& draw)
+    {
+        if (!m_inFrame) {
+            return;
+        }
+
+        Recorded entry;
+        entry.kind = Recorded::Kind::Circle;
+        entry.circle = draw;
+        m_recorded.push_back(entry);
+    }
+
+    void NullRenderer::drawPolygon(const PolygonDraw& draw)
+    {
+        if (!m_inFrame) {
+            return;
+        }
+
+        Recorded entry;
+        entry.kind = Recorded::Kind::Polygon;
+        entry.polygon = draw;
+        entry.polygon.points = {};
+        entry.polygonPoints.assign(draw.points.begin(), draw.points.end());
+        m_recorded.push_back(std::move(entry));
+    }
+
     void NullRenderer::drawMesh(const MeshDraw& draw)
     {
         if (draw.vertices.empty() || draw.indices.empty() || !m_inFrame) {
@@ -120,6 +182,20 @@ namespace gfx {
         entry.meshTexture = draw.texture;
         entry.meshLayer = draw.layer;
         entry.meshSpace = draw.space;
+        m_recorded.push_back(std::move(entry));
+    }
+
+    void NullRenderer::drawText(const TextDraw& draw)
+    {
+        if (!m_inFrame) {
+            return;
+        }
+
+        Recorded entry;
+        entry.kind = Recorded::Kind::Text;
+        entry.text = draw;
+        entry.text.text = {};
+        entry.textContent.assign(draw.text);
         m_recorded.push_back(std::move(entry));
     }
 
