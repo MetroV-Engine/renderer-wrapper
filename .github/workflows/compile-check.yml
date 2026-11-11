@@ -1,0 +1,80 @@
+name: Compile check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [compile-check]
+
+jobs:
+  compile:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-mingw
+            os: windows-latest
+            triplet: x64-mingw-dynamic
+            cc: gcc
+            cxx: g++
+          - name: windows-msvc
+            os: windows-latest
+            triplet: x64-windows
+            cc: cl
+            cxx: cl
+          - name: macos
+            os: macos-latest
+            triplet: arm64-osx
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: 256acc64012b23a13041d8705805e1f23b43a024
+          path: vcpkg
+
+      - uses: lukka/get-cmake@v4.3.1
+        with:
+          cmakeVersion: 3.31.6
+          ninjaVersion: 1.12.1
+
+      - name: Select MinGW GCC
+        if: matrix.name == 'windows-mingw'
+        # Put first so another gcc on PATH (e.g. Strawberry Perl's) is not picked.
+        run: echo "C:/mingw64/bin" >> "$GITHUB_PATH"
+
+      - name: Select MSVC
+        if: matrix.name == 'windows-msvc'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set compiler
+        if: matrix.cc
+        run: |
+          echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
+          echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
+
+      - name: Bootstrap vcpkg
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ./vcpkg/bootstrap-vcpkg.bat -disableMetrics
+          else
+            ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+          fi
+
+      - name: Configure
+        # PRE_TEST stops the build from running renderer_tests to discover them.
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
+          -DVCPKG_HOST_TRIPLET=${{ matrix.triplet }}
+          -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST
+
+      - name: Build
+        run: cmake --build build --parallel
