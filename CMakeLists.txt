@@ -124,6 +124,8 @@ add_executable(renderer_wrapper
         Playground/Showcase/Showcase.hpp
         Playground/Scenery/Scenery.cpp
         Playground/Scenery/Scenery.hpp
+        Playground/Gallery/Gallery.cpp
+        Playground/Gallery/Gallery.hpp
         # As sources, these run shaderc before compiling and again on every .sc edit.
         ${VERTEX_SHADER_HEADERS}
         ${FRAGMENT_SHADER_HEADERS}

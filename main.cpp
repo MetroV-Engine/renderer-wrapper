@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "Tools/ImageLoader/ImageLoader.hpp"
+#include "Playground/Gallery/Gallery.hpp"
 #include "Playground/ModeToggle/ModeToggle.hpp"
 #include "Playground/Player/Player.hpp"
 #include "Playground/Scenery/Scenery.hpp"
@@ -39,6 +40,7 @@ namespace {
     constexpr float GroundTop = 600.0f;
     constexpr float PlayFocusAbove = 240.0f;    // camera centre above the bull's feet, as at startup
     constexpr gfx::Vec2 ShowcaseCenter{ -70.0f, 170.0f };   // above the third platform
+    constexpr gfx::Vec2 GalleryOrigin{ 130.0f, 80.0f };     // first sample's centre: the row is on screen at startup
 
     constexpr float PanSpeed = 700.0f;      // world units per second at zoom 1
     constexpr float ZoomStep = 1.12f;
@@ -188,9 +190,9 @@ int main(int argc, char** argv)
     }
 
     std::printf("backend: %s\n", renderer->backendName());
-    std::printf("Tab or HUD button toggles edit/play | edit: WASD/arrows pan | play: A/D/arrows walk\n");
+    std::printf("Tab or HUD button toggles edit/play | edit: WASD/arrows pan | play: A/D/arrows walk, space hops\n");
     std::printf("edit: mouse wheel zooms | escape quits\n");
-    std::printf("checks: R reloads the showcase texture mid-frame | F forces renderer misuse warnings\n");
+    std::printf("checks: R reloads the showcase texture mid-frame | F forces renderer misuse warnings (showcase + gallery)\n");
 
     const std::optional<tools::Image> sheet = tools::loadPng(assetPath("bongo_marche_spritesheet.png"));
     const gfx::TextureHandle bullTexture = sheet.has_value()
@@ -204,6 +206,24 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    // Without these sheets the bull still idles and hops on walk frames: not worth refusing to start over.
+    const std::optional<tools::Image> idleSheet = tools::loadPng(assetPath("bongo_repos_spritesheet.png"));
+    const gfx::TextureHandle idleTexture = idleSheet.has_value()
+        ? renderer->createTexture(idleSheet->rgba.data(), idleSheet->width, idleSheet->height)
+        : gfx::TextureHandle::Invalid;
+    if (idleTexture == gfx::TextureHandle::Invalid) {
+        std::printf("Could not load the bull idle sheet: it will stand still\n");
+    }
+
+    const std::optional<tools::Image> jumpSheet = tools::loadPng(assetPath("bongo_saut_spritesheet.png"));
+    gfx::TextureHandle jumpTexture = jumpSheet.has_value()
+        ? renderer->createTexture(jumpSheet->rgba.data(), jumpSheet->width, jumpSheet->height)
+        : gfx::TextureHandle::Invalid;
+    if (jumpTexture == gfx::TextureHandle::Invalid) {
+        std::printf("Could not load the bull jump sheet: hops will use walk frames\n");
+        jumpTexture = bullTexture;
+    }
+
     // Created after the last early return above; it must die before the renderer.
     const std::vector<uint8_t> fontFile = readFile(assetPath("DejaVuSans.ttf"));
     std::unique_ptr<gfx::Font> font = gfx::Font::create(*renderer, fontFile, FontPixelHeight);
@@ -211,8 +231,9 @@ int main(int argc, char** argv)
         std::printf("Could not create the font: the HUD will have no text\n");
     }
 
-    playground::Player player(bullTexture, gfx::Vec2{ 120.0f, GroundTop });
+    playground::Player player(bullTexture, idleTexture, jumpTexture, gfx::Vec2{ 120.0f, GroundTop });
     playground::ModeToggle modeToggle(playground::Mode::Edit);
+    playground::Gallery gallery(*renderer, bullTexture, font.get(), GalleryOrigin);
 
     // Holds a texture on the renderer: optional so it can be released before the renderer dies.
     std::optional<playground::Showcase> showcase;
@@ -266,10 +287,15 @@ int main(int argc, char** argv)
                         running = false;
                     } else if (event.key.repeat) {
                         break;
+                    } else if (event.key.scancode == SDL_SCANCODE_SPACE) {
+                        if (modeToggle.mode() == playground::Mode::Play) {
+                            player.jump();
+                        }
                     } else if (event.key.scancode == SDL_SCANCODE_R) {
                         showcase->requestReload();
                     } else if (event.key.scancode == SDL_SCANCODE_F) {
                         showcase->misuse();
+                        gallery.requestMisuse();
                     }
                     break;
 
@@ -297,6 +323,7 @@ int main(int argc, char** argv)
         }
 
         renderer->drawSprite(player.sprite());
+        gallery.draw(*renderer);
 
         // Before the HUD: both are Foreground, so submission order keeps the bushes under it.
         scenery.drawForeground(*renderer);
@@ -314,6 +341,12 @@ int main(int argc, char** argv)
 
     showcase.reset();
     font.reset();
+    if (idleTexture != gfx::TextureHandle::Invalid) {
+        renderer->destroyTexture(idleTexture);
+    }
+    if (jumpTexture != bullTexture) {
+        renderer->destroyTexture(jumpTexture);
+    }
     renderer->destroyTexture(bullTexture);
 
     // The renderer holds an SDL_Renderer tied to this window: release it before the window dies.
